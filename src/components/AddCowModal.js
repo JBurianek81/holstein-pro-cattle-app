@@ -7,6 +7,7 @@ import {
   COW_GENDERS, 
   COW_CATEGORIES, 
   COW_STATUSES,
+  PRODUCTION_STATUSES,
   getCategoryByAge
 } from '../utils/cowDataModel';
 
@@ -18,7 +19,8 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
     breed: '',
     gender: '',
     category: '',
-    status: 'Active',
+    status: 'Active', // Legacy field, kept for compatibility
+    productionStatus: 'Non-Milking',
     notes: ''
   });
   
@@ -36,6 +38,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         gender: editingCow.gender || '',
         category: editingCow.category || '',
         status: editingCow.status || 'Active',
+        productionStatus: editingCow.productionStatus || 'Non-Milking',
         notes: editingCow.notes || ''
       });
     } else {
@@ -47,6 +50,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         gender: '',
         category: '',
         status: 'Active',
+        productionStatus: 'Non-Milking',
         notes: ''
       });
     }
@@ -84,9 +88,18 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
 
     try {
       const cowRecord = editingCow 
-        ? { ...editingCow, ...formData, updatedAt: new Date().toISOString() }
+        ? { 
+            ...editingCow, 
+            ...formData, 
+            updatedAt: new Date().toISOString(),
+            // Ensure arrays exist for edited cows too
+            healthRecords: editingCow.healthRecords || [],
+            breedingRecords: editingCow.breedingRecords || [],
+            calvingRecords: editingCow.calvingRecords || []
+          }
         : createCowRecord(formData);
       
+      console.log('Saved cow:', cowRecord.name, editingCow ? '(updated)' : '(new)');
       await onSave(cowRecord);
       onClose();
     } catch (error) {
@@ -265,18 +278,18 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
               )}
             </div>
 
-            {/* Status */}
+            {/* Production Status */}
             <div>
               <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-2">
                 <Activity className="w-4 h-4" />
-                <span>Status</span>
+                <span>Production Status</span>
               </label>
               <select
-                value={formData.status}
-                onChange={(e) => handleChange('status', e.target.value)}
+                value={formData.productionStatus}
+                onChange={(e) => handleChange('productionStatus', e.target.value)}
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               >
-                {COW_STATUSES.map(status => (
+                {PRODUCTION_STATUSES.map(status => (
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>

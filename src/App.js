@@ -15,9 +15,13 @@ import {
   Search,
   Camera,
   Award,
-  Target
+  Target,
+  ChevronRight
 } from 'lucide-react';
 import AddCowModal from './components/AddCowModal';
+import HerdManagement from './components/HerdManagement';
+import CowProfileModal from './components/CowProfileModal';
+import { calculateReproductiveStatus } from './utils/cowDataModel';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -27,14 +31,10 @@ function App() {
   const [cows, setCows] = useState([]);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
+  const [profileCow, setProfileCow] = useState(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // Enhanced sample data
-  const metrics = {
-    total: { value: 247, change: '+12', trend: 'up' },
-    pregnant: { value: 89, change: '+5', trend: 'up' },
-    breeding: { value: 23, change: '-2', trend: 'down' },
-    health: { value: 96, change: '+1', trend: 'up' }
-  };
+  // Sample data for alerts (keeping for display purposes)
 
   // Priority alerts with visual hierarchy
   const alerts = [
@@ -70,6 +70,7 @@ function App() {
     setIsAddCowModalOpen(true);
   };
 
+  // Cow editing function (will be used in Herd Management page)
   const handleEditCow = (cow) => {
     setEditingCow(cow);
     setIsAddCowModalOpen(true);
@@ -77,27 +78,35 @@ function App() {
 
   const handleSaveCow = async (cowData) => {
     try {
+      // Calculate and set reproductive status
+      const reproductiveStatus = calculateReproductiveStatus(cowData);
+      const cowWithStatus = {
+        ...cowData,
+        reproductiveStatus: reproductiveStatus
+      };
+
       if (editingCow) {
         // Update existing cow
         setCows(prevCows => 
           prevCows.map(cow => 
-            cow.id === editingCow.id ? cowData : cow
+            cow.id === editingCow.id ? cowWithStatus : cow
           )
         );
       } else {
         // Add new cow
-        setCows(prevCows => [...prevCows, cowData]);
+        setCows(prevCows => [...prevCows, cowWithStatus]);
       }
       
       // Update metrics based on new cow data
       // This will be expanded as we add more features
-      console.log('Cow saved successfully:', cowData);
+      console.log('Cow saved successfully:', cowWithStatus);
     } catch (error) {
       console.error('Error saving cow:', error);
       throw error;
     }
   };
 
+  // Cow deletion function (will be used in Herd Management page)
   const handleDeleteCow = (cowId) => {
     setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
   };
@@ -105,6 +114,36 @@ function App() {
   const handleCloseModal = () => {
     setIsAddCowModalOpen(false);
     setEditingCow(null);
+  };
+
+  // Profile modal handlers
+  const handleViewProfile = (cow) => {
+    setProfileCow(cow);
+    setIsProfileModalOpen(true);
+  };
+
+  const handleCloseProfile = () => {
+    setIsProfileModalOpen(false);
+    setProfileCow(null);
+  };
+
+  const handleUpdateCowFromProfile = (updatedCow) => {
+    // Calculate and set reproductive status
+    const reproductiveStatus = calculateReproductiveStatus(updatedCow);
+    const cowWithStatus = {
+      ...updatedCow,
+      reproductiveStatus: reproductiveStatus
+    };
+
+    setCows(prevCows => 
+      prevCows.map(cow => 
+        cow.id === updatedCow.id ? cowWithStatus : cow
+      )
+    );
+    
+    // Also update the profileCow state to reflect changes immediately
+    setProfileCow(cowWithStatus);
+    console.log('Updated cow profile for:', cowWithStatus.name);
   };
 
   // Update metrics based on current cows data
@@ -210,8 +249,15 @@ function App() {
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-              <p className="text-slate-600">Monitor your breeding program performance</p>
+              <h1 className="text-2xl font-bold text-slate-900">
+                {currentView === 'herd' ? 'Herd Management' : 'Dashboard'}
+              </h1>
+              <p className="text-slate-600">
+                {currentView === 'herd' 
+                  ? 'Manage your cattle records and herd information'
+                  : 'Monitor your breeding program performance'
+                }
+              </p>
             </div>
             <div className="flex items-center space-x-4">
               <div className="relative">
@@ -240,17 +286,23 @@ function App() {
             <div className="space-y-6">
               {/* Key Metrics */}
               <div className="grid grid-cols-4 gap-6">
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+                <div 
+                  onClick={() => setCurrentView('herd')}
+                  className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center group-hover:bg-blue-200 transition-colors">
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
-                    <span className="text-green-500 text-sm font-medium flex items-center">
-                      +12 <TrendingUp className="w-3 h-3 ml-1" />
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-green-500 text-sm font-medium flex items-center">
+                        +12 <TrendingUp className="w-3 h-3 ml-1" />
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-colors" />
+                    </div>
                   </div>
                   <div className="text-3xl font-bold text-slate-900 mb-1">{updatedMetrics.total.value}</div>
-                  <div className="text-slate-600 text-sm">Total Herd</div>
+                  <div className="text-slate-600 text-sm group-hover:text-slate-700 transition-colors">Total Herd</div>
                 </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
@@ -482,8 +534,19 @@ function App() {
             </div>
           )}
 
+          {/* Herd Management View */}
+          {currentView === 'herd' && (
+            <HerdManagement
+              cows={cows}
+              onAddCow={handleAddCow}
+              onEditCow={handleEditCow}
+              onDeleteCow={handleDeleteCow}
+              onViewProfile={handleViewProfile}
+            />
+          )}
+
           {/* Other Views Placeholder */}
-          {currentView !== 'dashboard' && (
+          {currentView !== 'dashboard' && currentView !== 'herd' && (
             <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-slate-100">
               <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <BarChart3 className="w-8 h-8 text-slate-500" />
@@ -504,6 +567,14 @@ function App() {
         onClose={handleCloseModal}
         onSave={handleSaveCow}
         editingCow={editingCow}
+      />
+      
+      {/* Cow Profile Modal */}
+      <CowProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={handleCloseProfile}
+        cow={profileCow}
+        onUpdateCow={handleUpdateCowFromProfile}
       />
     </div>
   );
