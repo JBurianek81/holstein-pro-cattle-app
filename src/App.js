@@ -17,10 +17,16 @@ import {
   Award,
   Target
 } from 'lucide-react';
+import AddCowModal from './components/AddCowModal';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [notifications] = useState(3);
+  
+  // Cow management state
+  const [cows, setCows] = useState([]);
+  const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
+  const [editingCow, setEditingCow] = useState(null);
 
   // Enhanced sample data
   const metrics = {
@@ -58,11 +64,62 @@ function App() {
     }
   ];
 
+  // Cow management functions
+  const handleAddCow = () => {
+    setEditingCow(null);
+    setIsAddCowModalOpen(true);
+  };
+
+  const handleEditCow = (cow) => {
+    setEditingCow(cow);
+    setIsAddCowModalOpen(true);
+  };
+
+  const handleSaveCow = async (cowData) => {
+    try {
+      if (editingCow) {
+        // Update existing cow
+        setCows(prevCows => 
+          prevCows.map(cow => 
+            cow.id === editingCow.id ? cowData : cow
+          )
+        );
+      } else {
+        // Add new cow
+        setCows(prevCows => [...prevCows, cowData]);
+      }
+      
+      // Update metrics based on new cow data
+      // This will be expanded as we add more features
+      console.log('Cow saved successfully:', cowData);
+    } catch (error) {
+      console.error('Error saving cow:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteCow = (cowId) => {
+    setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
+  };
+
+  const handleCloseModal = () => {
+    setIsAddCowModalOpen(false);
+    setEditingCow(null);
+  };
+
+  // Update metrics based on current cows data
+  const updatedMetrics = {
+    total: { value: cows.length, change: '+12', trend: 'up' },
+    pregnant: { value: cows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length, change: '+5', trend: 'up' },
+    breeding: { value: cows.filter(cow => cow.status === 'Active' && cow.category === 'Heifer').length, change: '-2', trend: 'down' },
+    health: { value: Math.round((cows.filter(cow => cow.status === 'Active').length / Math.max(cows.length, 1)) * 100), change: '+1', trend: 'up' }
+  };
+
   // Navigation items with better organization
   const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, active: true },
-    { id: 'herd', label: 'Herd Management', icon: Users, badge: '247' },
-    { id: 'breeding', label: 'Breeding Center', icon: Heart, badge: '23' },
+    { id: 'herd', label: 'Herd Management', icon: Users, badge: updatedMetrics.total.value.toString() },
+    { id: 'breeding', label: 'Breeding Center', icon: Heart, badge: updatedMetrics.breeding.value.toString() },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'reports', label: 'Reports', icon: TrendingUp },
@@ -90,11 +147,11 @@ function App() {
         <div className="p-4 border-b border-slate-100">
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
-              <div className="text-lg font-bold text-green-700">89</div>
+              <div className="text-lg font-bold text-green-700">{updatedMetrics.pregnant.value}</div>
               <div className="text-xs text-green-600">Pregnant</div>
             </div>
             <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-3 rounded-lg border border-orange-100">
-              <div className="text-lg font-bold text-orange-700">23</div>
+              <div className="text-lg font-bold text-orange-700">{updatedMetrics.breeding.value}</div>
               <div className="text-xs text-orange-600">In Heat</div>
             </div>
           </div>
@@ -192,7 +249,7 @@ function App() {
                       +12 <TrendingUp className="w-3 h-3 ml-1" />
                     </span>
                   </div>
-                  <div className="text-3xl font-bold text-slate-900 mb-1">{metrics.total.value}</div>
+                  <div className="text-3xl font-bold text-slate-900 mb-1">{updatedMetrics.total.value}</div>
                   <div className="text-slate-600 text-sm">Total Herd</div>
                 </div>
 
@@ -205,7 +262,7 @@ function App() {
                       +5 <TrendingUp className="w-3 h-3 ml-1" />
                     </span>
                   </div>
-                  <div className="text-3xl font-bold text-slate-900 mb-1">{metrics.pregnant.value}</div>
+                  <div className="text-3xl font-bold text-slate-900 mb-1">{updatedMetrics.pregnant.value}</div>
                   <div className="text-slate-600 text-sm">Confirmed Pregnant</div>
                 </div>
 
@@ -216,7 +273,7 @@ function App() {
                     </div>
                     <span className="text-orange-500 text-sm font-medium">URGENT</span>
                   </div>
-                  <div className="text-3xl font-bold text-slate-900 mb-1">{metrics.breeding.value}</div>
+                  <div className="text-3xl font-bold text-slate-900 mb-1">{updatedMetrics.breeding.value}</div>
                   <div className="text-slate-600 text-sm">Ready to Breed</div>
                 </div>
 
@@ -229,7 +286,7 @@ function App() {
                       +1% <TrendingUp className="w-3 h-3 ml-1" />
                     </span>
                   </div>
-                  <div className="text-3xl font-bold text-slate-900 mb-1">{metrics.health.value}%</div>
+                  <div className="text-3xl font-bold text-slate-900 mb-1">{updatedMetrics.health.value}%</div>
                   <div className="text-slate-600 text-sm">Health Score</div>
                 </div>
               </div>
@@ -401,7 +458,10 @@ function App() {
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
                 <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-4 gap-4">
-                  <button className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center">
+                  <button 
+                    onClick={handleAddCow}
+                    className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center"
+                  >
                     <Plus className="w-6 h-6 mx-auto mb-2" />
                     <span className="text-sm font-medium">Add Cow</span>
                   </button>
@@ -437,6 +497,14 @@ function App() {
           )}
         </main>
       </div>
+      
+      {/* Add Cow Modal */}
+      <AddCowModal
+        isOpen={isAddCowModalOpen}
+        onClose={handleCloseModal}
+        onSave={handleSaveCow}
+        editingCow={editingCow}
+      />
     </div>
   );
 }
