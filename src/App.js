@@ -5,19 +5,14 @@ import {
   Calendar, 
   BarChart3, 
   Settings, 
-  Bell, 
-  User,
+  Bell,
   Plus,
   Activity,
   AlertTriangle,
   TrendingUp,
   Heart,
   Zap,
-  ChevronRight,
   Search,
-  Filter,
-  Download,
-  Eye,
   Camera,
   Award,
   Target
@@ -25,7 +20,7 @@ import {
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
-  const [notifications, setNotifications] = useState(3);
+  const [notifications] = useState(3);
 
   // Enhanced sample data
   const metrics = {
@@ -62,14 +57,6 @@ function App() {
       time: '3 days ago'
     }
   ];
-
-  // Performance metrics
-  const performance = {
-    conceptionRate: 85,
-    avgDaysOpen: 95,
-    milkProduction: 32.4,
-    healthScore: 94
-  };
 
   // Navigation items with better organization
   const navigationItems = [
