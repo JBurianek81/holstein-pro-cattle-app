@@ -22,13 +22,11 @@ import {
   calculateReproductiveStatus,
   getReproductiveStatusBadge,
   getProductionStatusBadge,
-  createHeatRecord,
   HEALTH_RECORD_TYPES,
   BREEDING_METHODS,
   BREEDING_RESULTS,
   CALF_HEALTH_STATUS,
-  COMPLICATIONS,
-  PRODUCTION_STATUS
+  COMPLICATIONS
 } from '../utils/cowDataModel';
 
 // Tab components
@@ -528,7 +526,10 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [editingRecordType, setEditingRecordType] = useState(null);
+  const [showToast, setShowToast] = useState(false);
+
 
   if (!isOpen || !cow) return null;
 
@@ -651,12 +652,19 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
 
   // Handle recording heat detection
   const handleRecordHeat = () => {
-    const heatRecord = createHeatRecord();
+    const now = new Date();
+    const heatRecord = createHealthRecord({
+      type: 'Heat Detection',
+      description: 'Heat recorded via profile button',
+      date: now.toISOString().split('T')[0],
+      notes: 'Heat recorded via profile button',
+      createdAt: now.toISOString()
+    });
     let updatedCow = { ...normalizedCow };
     updatedCow.healthRecords = [...normalizedCow.healthRecords, heatRecord];
-    
-    console.log('Added heat detection record for cow:', normalizedCow.name);
     onUpdateCow(updatedCow);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2500);
   };
 
   // Handle pregnancy confirmation
@@ -676,6 +684,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
 
   return (
     <>
+      {/* Toast Notification - always above modal, centered, with fade animation */}
+      {showToast && (
+        <div className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none">
+          <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transition-opacity duration-300 opacity-100 animate-fade-in-out pointer-events-auto" style={{ minWidth: 280 }}>
+            <Heart className="w-5 h-5 text-white" />
+            <span>Heat recorded successfully</span>
+          </div>
+        </div>
+      )}
       {/* Main Modal */}
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">

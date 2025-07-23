@@ -6,7 +6,6 @@ import {
   COW_BREEDS, 
   COW_GENDERS, 
   COW_CATEGORIES, 
-  COW_STATUSES,
   PRODUCTION_STATUSES,
   getCategoryByAge
 } from '../utils/cowDataModel';
