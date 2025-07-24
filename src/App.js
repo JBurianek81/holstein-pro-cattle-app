@@ -184,15 +184,9 @@ function App() {
   const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId) => {
     console.log('🐄 handleBreedingRecordSaved called with:', { cow: cow.name, breedingRecord, selectedBullId });
     
-    // Update cow with new breeding record
-    setCows(prevCows => {
-      const updatedCows = prevCows.map(c => 
-        c.id === cow.id ? { ...c, breedingRecords: [...(c.breedingRecords || []), breedingRecord] } : c
-      );
-      console.log('🐄 Updated cows state:', updatedCows.length, 'cows');
-      return updatedCows;
-    });
-
+    // Note: Breeding record is already added to cow via onUpdateCow in CowProfileModal
+    // This function only handles bull inventory updates
+    
     // Reduce bull straw count by 1
     setBullInventory(prevInventory => {
       const updatedInventory = prevInventory.map(bull => 
@@ -202,7 +196,7 @@ function App() {
       return updatedInventory;
     });
 
-    console.log('✅ Breeding record saved and bull inventory updated');
+    console.log('✅ Bull inventory updated for breeding record');
   };
 
   // Get cows in heat today

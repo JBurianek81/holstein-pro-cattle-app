@@ -6,6 +6,7 @@ import {
   Plus, 
   Filter
 } from 'lucide-react';
+import { calculateReproductiveStatus } from '../utils/cowDataModel';
 
 const CalendarView = ({ cows }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -33,63 +34,126 @@ const CalendarView = ({ cows }) => {
     return calendar;
   };
 
-  // Get events for a specific date
+  // Get all events for a specific date
   const getEventsForDate = (date) => {
     const events = [];
     const dateStr = date.toISOString().split('T')[0];
     
     cows.forEach(cow => {
-      // Breeding due dates
-      if (cow.breedingRecords) {
-        cow.breedingRecords.forEach(breeding => {
-          if (breeding.expectedDueDate) {
-            const dueDate = new Date(breeding.expectedDueDate);
-            if (dueDate.toISOString().split('T')[0] === dateStr) {
-              events.push({
-                id: `breeding-${cow.id}-${breeding.id}`,
-                type: 'breeding',
-                title: `${cow.name} - Due Date`,
-                description: `Expected calving for ${cow.name}`,
-                cow: cow,
-                date: dueDate,
-                priority: 'high'
-              });
-            }
-          }
-        });
-      }
-      
-      // Health appointments
+      // Heat detection events
       if (cow.healthRecords) {
-        cow.healthRecords.forEach(health => {
-          if (health.date === dateStr) {
+        const heatRecords = cow.healthRecords.filter(record => 
+          record.type === 'Heat Detection' && record.date === dateStr
+        );
+        
+        if (heatRecords.length > 0) {
+          events.push({
+            id: `heat-${cow.id}-${heatRecords[0].id}`,
+            type: 'heat',
+            title: `${cow.name} - Heat Detection`,
+            description: 'Confirmed heat detection',
+            cow: cow,
+            date: new Date(heatRecords[0].date),
+            priority: 'high'
+          });
+        }
+      }
+
+      // Predicted heat dates
+      if (cow.healthRecords) {
+        const heatRecords = cow.healthRecords.filter(record => record.type === 'Heat Detection');
+        if (heatRecords.length > 0) {
+          const lastHeat = new Date(heatRecords[heatRecords.length - 1].date);
+          const predictedHeat = new Date(lastHeat);
+          predictedHeat.setDate(predictedHeat.getDate() + 21);
+          
+          if (predictedHeat.toISOString().split('T')[0] === dateStr) {
             events.push({
-              id: `health-${cow.id}-${health.id}`,
-              type: 'health',
-              title: `${cow.name} - ${health.type}`,
-              description: health.description,
+              id: `predicted-heat-${cow.id}`,
+              type: 'predicted_heat',
+              title: `${cow.name} - Predicted Heat`,
+              description: 'Predicted heat date (21-day cycle)',
               cow: cow,
-              date: new Date(health.date),
-              priority: health.type === 'Vaccination' ? 'medium' : 'low'
+              date: predictedHeat,
+              priority: 'medium'
             });
           }
-        });
+        }
       }
-      
-      // Calving records
-      if (cow.calvingRecords) {
-        cow.calvingRecords.forEach(calving => {
-          if (calving.date === dateStr) {
+
+      // Breeding records
+      if (cow.breedingRecords && Array.isArray(cow.breedingRecords) && cow.breedingRecords.length > 0) {
+        const breedingRecords = cow.breedingRecords.filter(record => 
+          record && record.date && record.date === dateStr
+        );
+        
+        if (breedingRecords.length > 0) {
+          events.push({
+            id: `breeding-${cow.id}-${breedingRecords[0].id}`,
+            type: 'breeding',
+            title: `${cow.name} - Breeding`,
+            description: `Bred with ${breedingRecords[0].bullName || 'Unknown Bull'}`,
+            cow: cow,
+            date: new Date(breedingRecords[0].date),
+            priority: 'high'
+          });
+        }
+      }
+
+      // Due dates (only for PREGNANT animals)
+      if (cow.breedingRecords && Array.isArray(cow.breedingRecords) && cow.breedingRecords.length > 0) {
+        const reproductiveStatus = calculateReproductiveStatus(cow);
+        if (reproductiveStatus === 'PREGNANT') {
+          const mostRecentBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+          if (mostRecentBreeding && mostRecentBreeding.expectedDueDate && mostRecentBreeding.expectedDueDate === dateStr) {
             events.push({
-              id: `calving-${cow.id}-${calving.id}`,
-              type: 'calving',
-              title: `${cow.name} - Calved`,
-              description: `Calved ${calving.calfTag} (${calving.calfGender})`,
+              id: `due-date-${cow.id}-${mostRecentBreeding.id}`,
+              type: 'due_date',
+              title: `${cow.name} - Due Date`,
+              description: 'Expected calving date',
               cow: cow,
-              date: new Date(calving.date),
+              date: new Date(mostRecentBreeding.expectedDueDate),
               priority: 'high'
             });
           }
+        }
+      }
+      
+      // Calving records
+      if (cow.calvingRecords && Array.isArray(cow.calvingRecords) && cow.calvingRecords.length > 0) {
+        const calvingRecords = cow.calvingRecords.filter(record => 
+          record && record.date && record.date === dateStr
+        );
+        
+        if (calvingRecords.length > 0) {
+          events.push({
+            id: `calving-${cow.id}-${calvingRecords[0].id}`,
+            type: 'calving',
+            title: `${cow.name} - Calved`,
+            description: `Calved ${calvingRecords[0].calfTag || 'Unknown'} (${calvingRecords[0].calfGender || 'Unknown'})`,
+            cow: cow,
+            date: new Date(calvingRecords[0].date),
+            priority: 'high'
+          });
+        }
+      }
+
+      // Other health records
+      if (cow.healthRecords) {
+        const otherHealthRecords = cow.healthRecords.filter(record => 
+          record.type !== 'Heat Detection' && record.date === dateStr
+        );
+        
+        otherHealthRecords.forEach(health => {
+          events.push({
+            id: `health-${cow.id}-${health.id}`,
+            type: 'health',
+            title: `${cow.name} - ${health.type}`,
+            description: health.description || health.type,
+            cow: cow,
+            date: new Date(health.date),
+            priority: health.type === 'Vaccination' ? 'medium' : 'low'
+          });
         });
       }
     });
@@ -108,12 +172,18 @@ const CalendarView = ({ cows }) => {
     const baseStyle = 'px-2 py-1 rounded text-xs font-medium mb-1 cursor-pointer hover:opacity-80 transition-opacity';
     
     switch (event.type) {
+      case 'heat':
+        return `${baseStyle} bg-red-100 text-red-700 border border-red-200`;
+      case 'predicted_heat':
+        return `${baseStyle} bg-orange-100 text-orange-700 border border-orange-200`;
       case 'breeding':
-        return `${baseStyle} bg-pink-100 text-pink-700 border border-pink-200`;
-      case 'health':
         return `${baseStyle} bg-blue-100 text-blue-700 border border-blue-200`;
+      case 'due_date':
+        return `${baseStyle} bg-purple-100 text-purple-700 border border-purple-200`;
       case 'calving':
         return `${baseStyle} bg-green-100 text-green-700 border border-green-200`;
+      case 'health':
+        return `${baseStyle} bg-indigo-100 text-indigo-700 border border-indigo-200`;
       default:
         return `${baseStyle} bg-gray-100 text-gray-700 border border-gray-200`;
     }
@@ -228,9 +298,12 @@ const CalendarView = ({ cows }) => {
             className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">All Events</option>
+            <option value="heat">Heat Detection</option>
+            <option value="predicted_heat">Predicted Heat</option>
             <option value="breeding">Breeding</option>
-            <option value="health">Health</option>
+            <option value="due_date">Due Dates</option>
             <option value="calving">Calving</option>
+            <option value="health">Health</option>
           </select>
         </div>
       </div>

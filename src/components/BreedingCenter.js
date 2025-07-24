@@ -16,7 +16,8 @@ import {
   Baby,
   Activity,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { calculateReproductiveStatus, createHealthRecord, createHeatRecord } from '../utils/cowDataModel';
 
@@ -26,10 +27,23 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('overview');
+  const [activeFilter, setActiveFilter] = useState(null);
+  
+  // Force calendar to update when cows data changes
+  const [calendarKey, setCalendarKey] = useState(0);
+  
+  useEffect(() => {
+    setCalendarKey(prev => prev + 1);
+  }, [cows]);
 
   const [showBullModal, setShowBullModal] = useState(false);
   // Add state for editing bulls
   const [editingBull, setEditingBull] = useState(null);
+  
+  // Pregnancy check confirmation dialog state
+  const [showPregnancyCheckDialog, setShowPregnancyCheckDialog] = useState(false);
+  const [pregnancyCheckCow, setPregnancyCheckCow] = useState(null);
+  const [pregnancyCheckAction, setPregnancyCheckAction] = useState(null); // 'pregnant' or 'open'
 
   // Get today's date string
   const today = new Date().toISOString().split('T')[0];
@@ -79,7 +93,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     });
   };
 
-  // Get pregnancy checks due today
+  // Get pregnancy checks due today (40 days after breeding)
   const getPregnancyChecksDueToday = () => {
     return cows.filter(cow => {
       if (!cow.breedingRecords) return false;
@@ -89,10 +103,58 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
       
       const breedingDate = new Date(lastBreeding.date);
       const checkDate = new Date(breedingDate);
-      checkDate.setDate(checkDate.getDate() + 30); // 30 days after breeding
+      checkDate.setDate(checkDate.getDate() + 40); // 40 days after breeding
       
       return checkDate.toISOString().split('T')[0] === today;
     });
+  };
+
+  // Get all animals that need pregnancy checks (40+ days after breeding)
+  const getAnimalsNeedingPregnancyChecks = () => {
+    return cows.filter(cow => {
+      if (!cow.breedingRecords) return false;
+      
+      const lastBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+      if (!lastBreeding) return false;
+      
+      const breedingDate = new Date(lastBreeding.date);
+      const daysSinceBreeding = Math.floor((new Date() - breedingDate) / (1000 * 60 * 60 * 24));
+      
+      // Only include animals that are 40+ days after breeding AND still have BRED status
+      const reproductiveStatus = calculateReproductiveStatus(cow);
+      const needsPregnancyCheck = daysSinceBreeding >= 40 && reproductiveStatus === 'BRED';
+      
+      console.log('🐄 Cow', cow.name, 'days since breeding:', daysSinceBreeding, 'status:', reproductiveStatus, 'needs check:', needsPregnancyCheck);
+      
+      return needsPregnancyCheck;
+    }).map(cow => {
+      const lastBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+      const breedingDate = new Date(lastBreeding.date);
+      const daysSinceBreeding = Math.floor((new Date() - breedingDate) / (1000 * 60 * 60 * 24));
+      
+      return {
+        ...cow,
+        daysSinceBreeding,
+        breedingDate: lastBreeding.date,
+        isOverdue: daysSinceBreeding > 40
+      };
+    }).sort((a, b) => b.daysSinceBreeding - a.daysSinceBreeding); // Sort by most overdue first
+  };
+
+  // Get filtered animals based on active filter
+  const getFilteredAnimals = () => {
+    switch (activeFilter) {
+      case 'totalHerd':
+        return cows;
+      case 'inHeatToday':
+        return getCowsInHeatToday();
+      case 'predictedHeat':
+        return getCowsWithPredictedHeatToday();
+      case 'pregnancyChecks':
+        return getAnimalsNeedingPregnancyChecks();
+      default:
+        return [];
+    }
   };
 
   // Calculate breeding metrics
@@ -104,7 +166,8 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     successRate: cows.length > 0 ? Math.round((cowsByStatus.PREGNANT.length / cows.length) * 100) : 0,
     inHeatToday: getCowsInHeatToday().length,
     predictedHeatToday: getCowsWithPredictedHeatToday().length,
-    pregnancyChecksDue: getPregnancyChecksDueToday().length
+    pregnancyChecksDue: getPregnancyChecksDueToday().length,
+    pregnancyChecksNeeded: getAnimalsNeedingPregnancyChecks().length
   };
 
 
@@ -162,10 +225,15 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     return calendar;
   };
 
-  // Get heat events for a specific date
+  // Get heat events for a specific date (Heat Calendar only)
   const getHeatEventsForDate = (date) => {
     const dateStr = date.toISOString().split('T')[0];
     const events = [];
+
+    // Ensure we have valid cows data
+    if (!cows || cows.length === 0) {
+      return events;
+    }
 
     cows.forEach(cow => {
       // Check for confirmed heat detections
@@ -176,7 +244,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
         
         if (heatRecords.length > 0) {
           events.push({
-            type: 'confirmed',
+            type: 'heat',
             cow: cow,
             record: heatRecords[0]
           });
@@ -193,7 +261,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
           
           if (predictedHeat.toISOString().split('T')[0] === dateStr) {
             events.push({
-              type: 'predicted',
+              type: 'predicted_heat',
               cow: cow,
               predictedDate: predictedHeat
             });
@@ -203,6 +271,18 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     });
 
     return events;
+  };
+
+  // Helper function to get heat event type labels
+  const getHeatEventTypeLabel = (eventType) => {
+    switch (eventType) {
+      case 'heat':
+        return 'Confirmed Heat';
+      case 'predicted_heat':
+        return 'Predicted Heat';
+      default:
+        return 'Heat Event';
+    }
   };
 
   // Navigation functions
@@ -261,6 +341,54 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     }
   };
 
+  // Pregnancy check handlers
+  const handlePregnancyCheck = (cow, action) => {
+    setPregnancyCheckCow(cow);
+    setPregnancyCheckAction(action);
+    setShowPregnancyCheckDialog(true);
+  };
+
+  const handleConfirmPregnancyCheck = () => {
+    if (!pregnancyCheckCow || !pregnancyCheckAction) return;
+
+    console.log('🐄 Confirming pregnancy check:', pregnancyCheckAction, 'for cow:', pregnancyCheckCow.name);
+
+    // Create a pregnancy check health record
+    const pregnancyRecord = createHealthRecord({
+      type: 'Pregnancy Check',
+      description: pregnancyCheckAction === 'pregnant' 
+        ? 'Pregnancy confirmed positive' 
+        : 'Pregnancy check negative',
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    console.log('🐄 Created pregnancy record:', pregnancyRecord);
+
+    // Update the cow's health records
+    const updatedCow = {
+      ...pregnancyCheckCow,
+      healthRecords: [...(pregnancyCheckCow.healthRecords || []), pregnancyRecord]
+    };
+
+    console.log('🐄 Updated cow health records count:', updatedCow.healthRecords.length);
+
+    // Update the cow in the main herd
+    onUpdateCow(updatedCow);
+
+    // Close the dialog
+    setShowPregnancyCheckDialog(false);
+    setPregnancyCheckCow(null);
+    setPregnancyCheckAction(null);
+
+    console.log('🐄 Pregnancy check completed for:', pregnancyCheckCow.name);
+  };
+
+  const handleCancelPregnancyCheck = () => {
+    setShowPregnancyCheckDialog(false);
+    setPregnancyCheckCow(null);
+    setPregnancyCheckAction(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -313,6 +441,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
             <Baby className="w-4 h-4" />
             <span>Bull Inventory</span>
           </button>
+
         </div>
 
         {/* Tab Content */}
@@ -322,7 +451,12 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
             <div className="space-y-6">
               {/* Quick Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setActiveFilter(activeFilter === 'totalHerd' ? null : 'totalHerd')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    activeFilter === 'totalHerd' ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Total Herd</p>
@@ -332,9 +466,14 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setActiveFilter(activeFilter === 'inHeatToday' ? null : 'inHeatToday')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    activeFilter === 'inHeatToday' ? 'ring-2 ring-red-500 bg-red-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">In Heat Today</p>
@@ -344,9 +483,14 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                       <Thermometer className="w-6 h-6 text-red-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setActiveFilter(activeFilter === 'predictedHeat' ? null : 'predictedHeat')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    activeFilter === 'predictedHeat' ? 'ring-2 ring-orange-500 bg-orange-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Predicted Heat</p>
@@ -356,20 +500,151 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                       <Clock className="w-6 h-6 text-orange-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setActiveFilter(activeFilter === 'pregnancyChecks' ? null : 'pregnancyChecks')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    activeFilter === 'pregnancyChecks' ? 'ring-2 ring-purple-500 bg-purple-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Pregnancy Checks</p>
-                      <p className="text-3xl font-bold text-purple-600">{breedingMetrics.pregnancyChecksDue}</p>
+                      <p className="text-3xl font-bold text-purple-600">{breedingMetrics.pregnancyChecksNeeded}</p>
+                      <p className="text-xs text-slate-500">40+ days after breeding</p>
                     </div>
                     <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
                       <Baby className="w-6 h-6 text-purple-600" />
                     </div>
                   </div>
-                </div>
+                </button>
               </div>
+
+              {/* Filtered Animals View */}
+              {activeFilter && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-6 border-b border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        {activeFilter === 'totalHerd' && 'All Animals in Herd'}
+                        {activeFilter === 'inHeatToday' && 'Animals in Heat Today'}
+                        {activeFilter === 'predictedHeat' && 'Animals with Predicted Heat Today'}
+                        {activeFilter === 'pregnancyChecks' && 'Animals Needing Pregnancy Checks'}
+                      </h3>
+                      <button 
+                        onClick={() => setActiveFilter(null)}
+                        className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                      >
+                        Clear Filter
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Animal</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tag Number</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                          {activeFilter === 'pregnancyChecks' && (
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Days Since Breeding</th>
+                          )}
+                          {activeFilter === 'pregnancyChecks' && (
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-slate-200">
+                        {getFilteredAnimals().map((cow) => (
+                          <tr key={cow.id} className="hover:bg-slate-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <button
+                                onClick={() => onViewProfile(cow)}
+                                className="text-sm font-medium text-slate-900 hover:text-blue-600 transition-colors text-left"
+                              >
+                                {cow.name}
+                              </button>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-slate-500">{cow.tagNumber}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {activeFilter === 'totalHerd' && (
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  calculateReproductiveStatus(cow) === 'PREGNANT' ? 'bg-green-100 text-green-800' :
+                                  calculateReproductiveStatus(cow) === 'BRED' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {calculateReproductiveStatus(cow)}
+                                </span>
+                              )}
+                              {activeFilter === 'inHeatToday' && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  In Heat
+                                </span>
+                              )}
+                              {activeFilter === 'predictedHeat' && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                  Predicted Heat
+                                </span>
+                              )}
+                              {activeFilter === 'pregnancyChecks' && (
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  cow.daysSinceBreeding > 50 ? 'bg-red-100 text-red-800' : 
+                                  cow.daysSinceBreeding > 45 ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {cow.daysSinceBreeding > 50 ? 'Critical' : 
+                                   cow.daysSinceBreeding > 45 ? 'Overdue' : 'Due'}
+                                </span>
+                              )}
+                            </td>
+                            {activeFilter === 'pregnancyChecks' && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-medium ${
+                                  cow.daysSinceBreeding > 50 ? 'text-red-600' : 
+                                  cow.daysSinceBreeding > 45 ? 'text-orange-600' : 'text-yellow-600'
+                                }`}>
+                                  {cow.daysSinceBreeding} days
+                                </div>
+                              </td>
+                            )}
+                            {activeFilter === 'pregnancyChecks' && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => handlePregnancyCheck(cow, 'pregnant')}
+                                    className="p-2 bg-green-100 hover:bg-green-200 text-green-600 hover:text-green-700 rounded-lg transition-colors"
+                                    title="Mark as Pregnant"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handlePregnancyCheck(cow, 'open')}
+                                    className="p-2 bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 rounded-lg transition-colors"
+                                    title="Mark as Open"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  {getFilteredAnimals().length === 0 && (
+                    <div className="text-center py-12">
+                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-slate-900 mb-2">No animals found</h3>
+                      <p className="text-slate-600">No animals match the selected filter criteria.</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Today's Breeding Priorities */}
               <div className="bg-gradient-to-r from-pink-50 to-red-50 rounded-2xl p-6 border border-pink-200">
@@ -431,35 +706,9 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                   </div>
                 )}
 
-                {/* Pregnancy Checks Due */}
-                {breedingMetrics.pregnancyChecksDue > 0 && (
-                  <div>
-                    <h4 className="font-medium text-purple-700 mb-3 flex items-center space-x-2">
-                      <Baby className="w-4 h-4" />
-                      <span>Pregnancy Checks Due ({breedingMetrics.pregnancyChecksDue})</span>
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {getPregnancyChecksDueToday().map(cow => (
-                        <div key={cow.id} className="bg-white rounded-lg p-3 border border-purple-200">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-medium text-slate-900">{cow.name}</p>
-                              <p className="text-sm text-slate-600">{cow.tagNumber}</p>
-                            </div>
-                            <button
-                              onClick={() => onViewProfile(cow)}
-                              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                            >
-                              View
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
-                {breedingMetrics.inHeatToday === 0 && breedingMetrics.predictedHeatToday === 0 && breedingMetrics.pregnancyChecksDue === 0 && (
+
+                {breedingMetrics.inHeatToday === 0 && breedingMetrics.predictedHeatToday === 0 && (
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
                     <p className="text-slate-600">No breeding priorities for today!</p>
@@ -534,12 +783,12 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                 </div>
 
                 {/* Calendar Days */}
-                <div className="grid grid-cols-7">
+                <div key={calendarKey} className="grid grid-cols-7">
                   {calendarData.map((date, index) => {
                     const isCurrentMonth = date.getMonth() === currentDate.getMonth();
                     const isToday = date.toDateString() === new Date().toDateString();
                     const isSelected = date.toDateString() === selectedDate.toDateString();
-                    const heatEvents = getHeatEventsForDate(date);
+                    const events = getHeatEventsForDate(date);
                     
                     return (
                       <div
@@ -561,31 +810,33 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                           }`}>
                             {date.getDate()}
                           </span>
-                          {heatEvents.length > 0 && (
-                            <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                              {heatEvents.length}
+                          {events.length > 0 && (
+                            <span className="bg-slate-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                              {events.length}
                             </span>
                           )}
                         </div>
                         
                         {/* Heat Events */}
                         <div className="space-y-1">
-                          {heatEvents.slice(0, 3).map((event, eventIndex) => (
+                          {events.slice(0, 3).map((event, eventIndex) => (
                             <div
                               key={eventIndex}
                               className={`px-2 py-1 rounded text-xs font-medium ${
-                                event.type === 'confirmed' 
+                                event.type === 'heat' 
                                   ? 'bg-red-100 text-red-700 border border-red-200'
-                                  : 'bg-orange-100 text-orange-700 border border-orange-200'
+                                  : event.type === 'predicted_heat'
+                                  ? 'bg-orange-100 text-orange-700 border border-orange-200'
+                                  : 'bg-slate-100 text-slate-700 border border-slate-200'
                               }`}
-                              title={`${event.cow.name} - ${event.type === 'confirmed' ? 'Confirmed Heat' : 'Predicted Heat'}`}
+                              title={`${event.cow.name} - ${getHeatEventTypeLabel(event.type)}`}
                             >
                               {event.cow.name}
                             </div>
                           ))}
-                          {heatEvents.length > 3 && (
+                          {events.length > 3 && (
                             <div className="text-xs text-slate-500">
-                              +{heatEvents.length - 3} more
+                              +{events.length - 3} more
                             </div>
                           )}
                         </div>
@@ -626,15 +877,19 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                           {events.map((event, index) => (
                             <div key={index} className="flex items-start space-x-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
                               <div className={`w-3 h-3 rounded-full mt-2 ${
-                                event.type === 'confirmed' ? 'bg-red-500' : 'bg-orange-500'
+                                event.type === 'heat' ? 'bg-red-500' 
+                                : event.type === 'predicted_heat' ? 'bg-orange-500'
+                                : 'bg-slate-500'
                               }`}></div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
                                   <h4 className="font-medium text-slate-900">{event.cow.name}</h4>
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    event.type === 'confirmed' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                                    event.type === 'heat' ? 'bg-red-100 text-red-700'
+                                    : event.type === 'predicted_heat' ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-slate-100 text-slate-700'
                                   }`}>
-                                    {event.type === 'confirmed' ? 'Confirmed Heat' : 'Predicted Heat'}
+                                    {getHeatEventTypeLabel(event.type)}
                                   </span>
                                 </div>
                                 <p className="text-sm text-slate-600 mt-1">{event.cow.tagNumber} • {event.cow.breed}</p>
@@ -717,11 +972,57 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
               </div>
             </div>
           )}
+
+
         </div>
       </div>
 
       {/* Bull Inventory Modal */}
       <BullInventoryModal isOpen={showBullModal} onClose={handleCloseBullModal} onSave={handleSaveBull} editingBull={editingBull} />
+
+      {/* Pregnancy Check Confirmation Dialog */}
+      {showPregnancyCheckDialog && pregnancyCheckCow && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-blue-100">
+                {pregnancyCheckAction === 'pregnant' ? (
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                ) : (
+                  <X className="w-8 h-8 text-red-600" />
+                )}
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                Confirm Pregnancy Check
+              </h3>
+              <p className="text-slate-600 mb-6">
+                Mark <span className="font-medium">{pregnancyCheckCow.name}</span> as{' '}
+                <span className={`font-medium ${pregnancyCheckAction === 'pregnant' ? 'text-green-600' : 'text-red-600'}`}>
+                  {pregnancyCheckAction === 'pregnant' ? 'Pregnant' : 'Open'}
+                </span>?
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleCancelPregnancyCheck}
+                  className="flex-1 px-4 py-2 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmPregnancyCheck}
+                  className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors ${
+                    pregnancyCheckAction === 'pregnant' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

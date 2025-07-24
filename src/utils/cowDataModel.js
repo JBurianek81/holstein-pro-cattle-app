@@ -336,24 +336,43 @@ export const calculateReproductiveStatus = (cow) => {
 
   // If pregnancy confirmed, return PREGNANT
   if (pregnancyCheck) {
+    console.log('🐄 Cow', cow.name, 'status: PREGNANT (pregnancy confirmed)');
     return REPRODUCTIVE_STATUS.PREGNANT;
   }
 
-  // Get recent breeding records (within last 45 days for BRED status)
-  const fortyFiveDaysAgo = new Date(now);
-  fortyFiveDaysAgo.setDate(now.getDate() - 45);
-  
-  const recentBreeding = cow.breedingRecords?.find(record => {
+  // Check for negative pregnancy check in health records (within last 90 days)
+  const negativePregnancyCheck = cow.healthRecords?.find(record => {
     const recordDate = new Date(record.date);
-    return recordDate >= fortyFiveDaysAgo && recordDate <= now;
+    return record.type === 'Pregnancy Check' && 
+           record.description && 
+           record.description.toLowerCase().includes('negative') &&
+           recordDate >= ninetyDaysAgo;
   });
 
-  // If recent breeding record exists and not failed, return BRED
-  if (recentBreeding && recentBreeding.result !== 'Failed') {
-    return REPRODUCTIVE_STATUS.BRED;
+  // If negative pregnancy check found, return OPEN
+  if (negativePregnancyCheck) {
+    console.log('🐄 Cow', cow.name, 'status: OPEN (negative pregnancy check)');
+    return REPRODUCTIVE_STATUS.OPEN;
+  }
+
+  // Check for any breeding records (cow is BRED if she has been bred and not confirmed pregnant)
+  const hasBreedingRecords = cow.breedingRecords && cow.breedingRecords.length > 0;
+  
+  if (hasBreedingRecords) {
+    // Get the most recent breeding record
+    const mostRecentBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+    
+    console.log('🐄 Cow', cow.name, 'has breeding records:', cow.breedingRecords.length, 'most recent result:', mostRecentBreeding.result);
+    
+    // If the most recent breeding was not marked as failed, return BRED
+    if (mostRecentBreeding.result !== 'Failed') {
+      console.log('🐄 Cow', cow.name, 'status: BRED (has breeding records)');
+      return REPRODUCTIVE_STATUS.BRED;
+    }
   }
 
   // Default status for mature females with no recent breeding activity
+  console.log('🐄 Cow', cow.name, 'status: OPEN (no breeding records or failed breeding)');
   return REPRODUCTIVE_STATUS.OPEN;
 };
 
