@@ -18,14 +18,18 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { calculateReproductiveStatus, createHealthRecord } from '../utils/cowDataModel';
+import { calculateReproductiveStatus, createHealthRecord, createHeatRecord } from '../utils/cowDataModel';
 
-const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
+const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpdateBullInventory }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('overview');
+
+  const [showBullModal, setShowBullModal] = useState(false);
+  // Add state for editing bulls
+  const [editingBull, setEditingBull] = useState(null);
 
   // Get today's date string
   const today = new Date().toISOString().split('T')[0];
@@ -107,11 +111,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
 
   // Record heat detection for a cow
   const recordHeatDetection = (cow) => {
-    const heatRecord = createHealthRecord({
-      type: 'Heat Detection',
-      description: 'Heat detected - ready for breeding',
-      date: today
-    });
+    const heatRecord = createHeatRecord();
 
     const updatedCow = {
       ...cow,
@@ -225,6 +225,42 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
 
+  // Add handler to open modal
+  const handleAddBull = () => setShowBullModal(true);
+  // Update handleCloseBullModal to reset editing state
+  const handleCloseBullModal = () => {
+    setShowBullModal(false);
+    setEditingBull(null);
+  };
+
+  // Add handler to add bull
+  const handleSaveBull = (bull) => {
+    if (editingBull !== null) {
+      // Editing existing bull
+      const updatedInventory = bullInventory.map((b, i) => i === editingBull.index ? bull : b);
+      onUpdateBullInventory(updatedInventory);
+      setEditingBull(null);
+    } else {
+      // Adding new bull
+      const updatedInventory = [...bullInventory, bull];
+      onUpdateBullInventory(updatedInventory);
+    }
+    setShowBullModal(false);
+  };
+
+  // Add handlers for edit and delete
+  const handleEditBull = (bull, index) => {
+    setEditingBull({ ...bull, index });
+    setShowBullModal(true);
+  };
+
+  const handleDeleteBull = (index) => {
+    if (window.confirm('Are you sure you want to delete this bull from inventory?')) {
+      const updatedInventory = bullInventory.filter((_, i) => i !== index);
+      onUpdateBullInventory(updatedInventory);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -267,15 +303,15 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
             <span>Heat Calendar</span>
           </button>
           <button
-            onClick={() => setActiveTab('bulls')}
+            onClick={() => setActiveTab('bullInventory')}
             className={`flex items-center space-x-2 px-6 py-4 font-medium transition-colors border-b-2 ${
-              activeTab === 'bulls'
+              activeTab === 'bullInventory'
                 ? 'border-pink-600 text-pink-600 bg-pink-50'
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-50'
             }`}
           >
-            <Target className="w-4 h-4" />
-            <span>Bull Management</span>
+            <Baby className="w-4 h-4" />
+            <span>Bull Inventory</span>
           </button>
         </div>
 
@@ -620,12 +656,12 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
             </div>
           )}
 
-          {/* Bull Management Tab */}
-          {activeTab === 'bulls' && (
+          {/* Bull Inventory Tab */}
+          {activeTab === 'bullInventory' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-900">Bull Catalog</h3>
-                <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                <h3 className="text-lg font-semibold text-slate-900">Bull Inventory</h3>
+                <button onClick={handleAddBull} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                   Add Bull
                 </button>
               </div>
@@ -635,69 +671,46 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
                   <table className="w-full">
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">ID</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">GPTA Score</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Traits</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Available Straws</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Bull Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">NAAB Code</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Straws Available</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Cost/Straw</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Total Value</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tank Location</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Canister #</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
-                      <tr className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-slate-900">Champion's Pride</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-500">BULL-001</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900">+2.8</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-1">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              High Milk
-                            </span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              Good Feet
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900">150</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900">View Details</button>
-                        </td>
-                      </tr>
-                      <tr className="hover:bg-slate-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-slate-900">Golden Genes</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-500">BULL-002</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900">+3.2</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex space-x-1">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                              High Protein
-                            </span>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                              Longevity
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-slate-900">75</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button className="text-blue-600 hover:text-blue-900">View Details</button>
-                        </td>
-                      </tr>
+                      {bullInventory.map((bull, index) => (
+                        <tr key={index} className="hover:bg-slate-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-slate-900">{bull.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-500">{bull.naabCode}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-900">{bull.straws}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-900">${bull.cost}/Straw</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-900">${bull.straws * bull.cost}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-900">{bull.tank}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-slate-900">{bull.canister}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onClick={() => handleEditBull(bull, index)} className="text-blue-600 hover:text-blue-900 mr-2">Edit</button>
+                            <button onClick={() => handleDeleteBull(index)} className="text-red-600 hover:text-red-900">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -706,8 +719,134 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow }) => {
           )}
         </div>
       </div>
+
+      {/* Bull Inventory Modal */}
+      <BullInventoryModal isOpen={showBullModal} onClose={handleCloseBullModal} onSave={handleSaveBull} editingBull={editingBull} />
     </div>
   );
 };
+
+function BullInventoryModal({ isOpen, onClose, onSave, editingBull }) {
+  const [form, setForm] = useState({
+    name: '',
+    naabCode: '',
+    straws: '',
+    cost: '',
+    tank: '',
+    canister: '',
+    purchaseDate: '',
+    supplier: ''
+  });
+  const [errors, setErrors] = useState({});
+
+  // Pre-populate form when editing
+  useEffect(() => {
+    if (editingBull) {
+      setForm({
+        name: editingBull.name || '',
+        naabCode: editingBull.naabCode || '',
+        straws: editingBull.straws || '',
+        cost: editingBull.cost || '',
+        tank: editingBull.tank || '',
+        canister: editingBull.canister || '',
+        purchaseDate: editingBull.purchaseDate || '',
+        supplier: editingBull.supplier || ''
+      });
+    } else {
+      setForm({
+        name: '',
+        naabCode: '',
+        straws: '',
+        cost: '',
+        tank: '',
+        canister: '',
+        purchaseDate: '',
+        supplier: ''
+      });
+    }
+  }, [editingBull]);
+
+  const validate = () => {
+    const errs = {};
+    if (!form.name.trim()) errs.name = 'Required';
+    if (!form.naabCode.trim() || !/^\w{3,}-?\w{2,}$/.test(form.naabCode)) errs.naabCode = 'Valid NAAB code required';
+    if (!form.straws || isNaN(form.straws) || Number(form.straws) < 0) errs.straws = 'Required, must be a number';
+    if (!form.cost || isNaN(form.cost) || Number(form.cost) < 0) errs.cost = 'Required, must be a number';
+    return errs;
+  };
+
+  const handleChange = (e) => {
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length === 0) {
+      onSave({ ...form, straws: Number(form.straws), cost: Number(form.cost) });
+      setForm({ name: '', naabCode: '', straws: '', cost: '', tank: '', canister: '', purchaseDate: '', supplier: '' });
+    }
+  };
+
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 relative">
+        <button className="absolute top-4 right-4 text-slate-400 hover:text-slate-700" onClick={onClose}>&times;</button>
+        <h2 className="text-2xl font-bold mb-4">{editingBull ? 'Edit Bull' : 'Add Bull to Inventory'}</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block font-medium">Bull Name *</label>
+            <input name="name" value={form.name} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            {errors.name && <div className="text-red-500 text-xs">{errors.name}</div>}
+          </div>
+          <div>
+            <label className="block font-medium">NAAB Code *</label>
+            <input name="naabCode" value={form.naabCode} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            {errors.naabCode && <div className="text-red-500 text-xs">{errors.naabCode}</div>}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Initial Straw Count *</label>
+              <input name="straws" type="number" value={form.straws} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+              {errors.straws && <div className="text-red-500 text-xs">{errors.straws}</div>}
+            </div>
+            <div>
+              <label className="block font-medium">Cost per Straw ($) *</label>
+              <input name="cost" type="number" value={form.cost} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+              {errors.cost && <div className="text-red-500 text-xs">{errors.cost}</div>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Tank Location</label>
+              <input name="tank" value={form.tank} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div>
+              <label className="block font-medium">Canister Number</label>
+              <input name="canister" value={form.canister} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Purchase Date</label>
+              <input name="purchaseDate" type="date" value={form.purchaseDate} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div>
+              <label className="block font-medium">Supplier/Company</label>
+              <input name="supplier" value={form.supplier} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700">
+              {editingBull ? 'Update Bull' : 'Add Bull'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default BreedingCenter; 

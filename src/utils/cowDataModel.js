@@ -281,6 +281,7 @@ export const HEALTH_RECORD_TYPES = [
   'Illness',
   'Routine Checkup',
   'Pregnancy Check',
+  'Heat Detection',
   'Hoof Trimming',
   'Deworming',
   'Other'

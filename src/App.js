@@ -36,6 +36,12 @@ function App() {
   const [editingCow, setEditingCow] = useState(null);
   const [profileCow, setProfileCow] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  
+  // Bull inventory state
+  const [bullInventory, setBullInventory] = useState([
+    { name: "Champion's Pride", naabCode: "BULL-001", straws: 150, cost: 100, tank: "Tank A", canister: "C-001", purchaseDate: "2024-01-10", supplier: "Genetics Inc." },
+    { name: "Golden Genes", naabCode: "BULL-002", straws: 75, cost: 120, tank: "Tank B", canister: "B-002", purchaseDate: "2024-02-15", supplier: "AgriSires" }
+  ]);
 
   // Load cows from localStorage on app start
   useEffect(() => {
@@ -167,6 +173,36 @@ function App() {
     // Also update the profileCow state to reflect changes immediately
     setProfileCow(cowWithStatus);
     console.log('✅ Updated cow profile for:', cowWithStatus.name);
+  };
+
+  // Bull inventory management functions
+  const handleUpdateBullInventory = (updatedBullInventory) => {
+    setBullInventory(updatedBullInventory);
+    console.log('✅ Updated bull inventory:', updatedBullInventory.length, 'bulls');
+  };
+
+  const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId) => {
+    console.log('🐄 handleBreedingRecordSaved called with:', { cow: cow.name, breedingRecord, selectedBullId });
+    
+    // Update cow with new breeding record
+    setCows(prevCows => {
+      const updatedCows = prevCows.map(c => 
+        c.id === cow.id ? { ...c, breedingRecords: [...(c.breedingRecords || []), breedingRecord] } : c
+      );
+      console.log('🐄 Updated cows state:', updatedCows.length, 'cows');
+      return updatedCows;
+    });
+
+    // Reduce bull straw count by 1
+    setBullInventory(prevInventory => {
+      const updatedInventory = prevInventory.map(bull => 
+        bull.naabCode === selectedBullId ? { ...bull, straws: Math.max(0, bull.straws - 1) } : bull
+      );
+      console.log('🐄 Updated bull inventory:', updatedInventory.length, 'bulls');
+      return updatedInventory;
+    });
+
+    console.log('✅ Breeding record saved and bull inventory updated');
   };
 
   // Get cows in heat today
@@ -481,6 +517,8 @@ function App() {
               cows={cows}
               onViewProfile={handleViewProfile}
               onUpdateCow={handleUpdateCowFromProfile}
+              bullInventory={bullInventory}
+              onUpdateBullInventory={handleUpdateBullInventory}
             />
           )}
 
@@ -518,6 +556,8 @@ function App() {
         onClose={handleCloseProfile}
         cow={profileCow}
         onUpdateCow={handleUpdateCowFromProfile}
+        bullInventory={bullInventory}
+        onBreedingRecordSaved={handleBreedingRecordSaved}
       />
     </div>
   );

@@ -11,11 +11,14 @@ import {
   ChevronDown,
   ChevronRight,
   Edit3,
-  Trash2
+  Trash2,
+  CheckCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   calculateAge,
   createHealthRecord,
+  createHeatRecord,
   createBreedingRecord,
   createCalvingRecord,
   calculateDueDate,
@@ -522,7 +525,7 @@ const CalvingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecord
   );
 });
 
-const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
+const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -540,6 +543,9 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
     breedingRecords: cow.breedingRecords || [],
     calvingRecords: cow.calvingRecords || []
   };
+
+  // Debug: Log cow data to see if it's being updated
+  console.log('🐄 CowProfileModal received cow data:', normalizedCow.name, 'breeding records:', normalizedCow.breedingRecords?.length || 0);
 
   // Debug: Check if cow has required arrays
   if (!cow.healthRecords) console.log('Cow missing healthRecords array, adding empty array');
@@ -652,14 +658,7 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
 
   // Handle recording heat detection
   const handleRecordHeat = () => {
-    const now = new Date();
-    const heatRecord = createHealthRecord({
-      type: 'Heat Detection',
-      description: 'Heat recorded via profile button',
-      date: now.toISOString().split('T')[0],
-      notes: 'Heat recorded via profile button',
-      createdAt: now.toISOString()
-    });
+    const heatRecord = createHeatRecord();
     let updatedCow = { ...normalizedCow };
     updatedCow.healthRecords = [...normalizedCow.healthRecords, heatRecord];
     onUpdateCow(updatedCow);
@@ -796,23 +795,45 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow }) => {
         isOpen={showAddRecordModal !== null}
         recordType={showAddRecordModal}
         editingRecord={editingRecord}
+        bullInventory={bullInventory}
         onClose={() => {
+          console.log('🐄 AddRecordModal onClose called');
           setShowAddRecordModal(null);
           setEditingRecord(null);
           setEditingRecordType(null);
+          console.log('🐄 AddRecordModal state reset');
         }}
         onSave={handleSaveRecord}
+        onBreedingRecordSaved={onBreedingRecordSaved}
+        onUpdateCow={onUpdateCow}
+        selectedCow={normalizedCow}
       />
     </>
   );
 };
 
 // Add Record Modal Component
-const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) => {
+const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [], onClose, onSave, onBreedingRecordSaved, onUpdateCow = () => {}, selectedCow }) => {
   const [formData, setFormData] = useState({});
+  const [selectedBull, setSelectedBull] = useState(null);
 
   const resetForm = () => {
     setFormData({});
+    setSelectedBull(null);
+  };
+
+  const handleBullSelection = (bullId) => {
+    const bull = bullInventory.find(b => b.naabCode === bullId);
+    setSelectedBull(bull);
+    
+    if (bull) {
+      setFormData(prev => ({
+        ...prev,
+        bullName: bull.name,
+        semenId: bull.naabCode,
+        cost: bull.cost
+      }));
+    }
   };
 
   // Reset form when modal opens/closes
@@ -853,7 +874,65 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) 
   };
 
   const handleSave = () => {
-    onSave(recordType, formData);
+    // Validate required fields
+    const config = getModalConfig();
+    const requiredFields = config.fields.filter(field => field.required);
+    const missingFields = requiredFields.filter(field => {
+      // For breeding records, bullSelection is handled separately
+      if (recordType === 'breeding' && field.name === 'bullSelection') {
+        return !selectedBull;
+      }
+      return !formData[field.name];
+    });
+    
+    if (missingFields.length > 0) {
+      alert(`Please fill in all required fields: ${missingFields.map(f => f.label).join(', ')}`);
+      return;
+    }
+
+    if (recordType === 'breeding') {
+      if (!selectedBull) {
+        alert('Please select a bull from the dropdown');
+        return;
+      }
+      if (!onBreedingRecordSaved) {
+        alert('Breeding record save function not available');
+        return;
+      }
+      // For breeding records, we need to handle bull inventory updates
+      // Map form data to match createBreedingRecord expectations
+      const breedingData = {
+        ...formData,
+        bullName: selectedBull.name, // Use selected bull's name
+        semenId: selectedBull.naabCode, // Use selected bull's NAAB code
+        cost: selectedBull.cost // Use selected bull's cost
+      };
+      console.log('🐄 Form data:', formData);
+      console.log('🐄 Selected bull:', selectedBull);
+      console.log('🐄 Creating breeding record with data:', breedingData);
+      const breedingRecord = createBreedingRecord(breedingData);
+      console.log('🐄 Created breeding record:', breedingRecord);
+      
+      // Update the local cow state immediately so the record appears in the UI
+      const updatedCow = {
+        ...selectedCow,
+        breedingRecords: [...(selectedCow.breedingRecords || []), breedingRecord]
+      };
+      onUpdateCow(updatedCow);
+      
+      // Also call the global update function for bull inventory
+      onBreedingRecordSaved(selectedCow, breedingRecord, selectedBull.naabCode);
+      console.log('🐄 Called onBreedingRecordSaved');
+      
+      console.log(`🐄 Breeding record saved successfully for ${selectedCow.name} with ${selectedBull.name}`);
+      console.log('🐄 About to call onClose()');
+      onClose(); // Close the modal after saving
+      console.log('🐄 Called onClose()');
+    } else {
+      // For other record types, use the normal save flow
+      onSave(recordType, formData);
+      onClose(); // Close the modal after saving
+    }
     resetForm();
   };
 
@@ -877,17 +956,23 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) 
           ]
         };
       case 'breeding':
+        // Filter bulls with available straws
+        const availableBulls = bullInventory.filter(bull => bull.straws > 0);
+        const bullOptions = availableBulls.map(bull => ({
+          value: bull.naabCode,
+          label: `${bull.name} (${bull.straws} straws available - $${bull.cost}/straw)`
+        }));
+
         return {
           title: isEditing ? 'Edit Breeding Record' : 'Add Breeding Record',
           color: 'pink',
           fields: [
             { name: 'date', label: 'Breeding Date', type: 'date', required: true, width: 'half', autoCalculateDue: true },
             { name: 'method', label: 'Method', type: 'select', options: BREEDING_METHODS, required: true, width: 'half' },
-            { name: 'bullName', label: 'Bull Name', type: 'text', width: 'half' },
-            { name: 'semenId', label: 'Semen ID', type: 'text', width: 'half' },
+            { name: 'bullSelection', label: 'Bull Selection', type: 'select', options: bullOptions, required: true, width: 'half', placeholder: 'Select Bull Name...', onChange: handleBullSelection },
+            { name: 'semenId', label: 'NAAB Code', type: 'text', width: 'half', readOnly: true, placeholder: 'Auto-filled from bull selection' },
+            { name: 'cost', label: 'Breeding Cost ($)', type: 'number', width: 'half', readOnly: true, placeholder: 'Auto-filled from bull selection' },
             { name: 'technician', label: 'Technician', type: 'text', width: 'half' },
-            { name: 'cost', label: 'Cost ($)', type: 'number', width: 'half' },
-            { name: 'result', label: 'Result', type: 'select', options: BREEDING_RESULTS, width: 'half' },
             { name: 'expectedDueDate', label: 'Expected Due Date', type: 'date', width: 'half', readOnly: true, helpText: '(Auto-calculated: 280 days from breeding)' },
             { name: 'notes', label: 'Notes', type: 'textarea', width: 'full' }
           ]
@@ -929,6 +1014,22 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) 
         </div>
 
         <div className="p-6">
+          {/* Bull selection confirmation */}
+          {recordType === 'breeding' && selectedBull && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-green-800 font-medium">✓ Bull details loaded: {selectedBull.name}</span>
+            </div>
+          )}
+          
+          {/* No bulls available message */}
+          {recordType === 'breeding' && bullInventory.filter(bull => bull.straws > 0).length === 0 && (
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center space-x-2">
+              <AlertTriangle className="w-5 h-5 text-yellow-600" />
+              <span className="text-yellow-800">No bulls available - add bulls to inventory first</span>
+            </div>
+          )}
+          
           <div className="grid grid-cols-2 gap-4">
             {config.fields.map((field) => (
               <div key={field.name} className={field.width === 'full' ? 'col-span-2' : 'col-span-1'}>
@@ -940,13 +1041,20 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) 
                 {field.type === 'select' ? (
                   <select
                     value={formData[field.name] || ''}
-                    onChange={(e) => handleFieldChange(field.name, e.target.value)}
+                    onChange={(e) => {
+                      handleFieldChange(field.name, e.target.value);
+                      if (field.onChange) {
+                        field.onChange(e.target.value);
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required={field.required}
                   >
-                    <option value="">Select {field.label}</option>
+                    <option value="">{field.placeholder || `Select ${field.label}`}</option>
                     {field.options.map(option => (
-                      <option key={option} value={option}>{option}</option>
+                      <option key={option.value || option} value={option.value || option}>
+                        {option.label || option}
+                      </option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
@@ -1002,7 +1110,12 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, onClose, onSave }) 
           </button>
           <button
             onClick={handleSave}
-            className={`px-6 py-2 bg-${config.color}-600 text-white rounded-lg hover:bg-${config.color}-700 transition-colors font-medium`}
+            disabled={recordType === 'breeding' && bullInventory.filter(bull => bull.straws > 0).length === 0}
+            className={`px-6 py-2 rounded-lg transition-colors font-medium ${
+              recordType === 'breeding' && bullInventory.filter(bull => bull.straws > 0).length === 0
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                : `bg-${config.color}-600 text-white hover:bg-${config.color}-700`
+            }`}
           >
             {editingRecord ? 'Update Record' : 'Save Record'}
           </button>
