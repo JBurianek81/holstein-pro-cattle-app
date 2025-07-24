@@ -141,11 +141,34 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     }).sort((a, b) => b.daysSinceBreeding - a.daysSinceBreeding); // Sort by most overdue first
   };
 
+  // Get cows due to calve this month
+  const getCowsDueThisMonth = () => {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    return cows.filter(cow => {
+      // Check if cow is pregnant
+      const reproductiveStatus = calculateReproductiveStatus(cow);
+      if (reproductiveStatus !== 'PREGNANT') return false;
+      
+      // Check if cow has breeding records with expected due date
+      if (!cow.breedingRecords || cow.breedingRecords.length === 0) return false;
+      
+      const lastBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+      if (!lastBreeding.expectedDueDate) return false;
+      
+      // Check if due date is in current month
+      const dueDate = new Date(lastBreeding.expectedDueDate);
+      return dueDate.getMonth() === currentMonth && dueDate.getFullYear() === currentYear;
+    });
+  };
+
   // Get filtered animals based on active filter
   const getFilteredAnimals = () => {
     switch (activeFilter) {
-      case 'totalHerd':
-        return cows;
+      case 'cowsDueThisMonth':
+        return getCowsDueThisMonth();
       case 'inHeatToday':
         return getCowsInHeatToday();
       case 'predictedHeat':
@@ -167,7 +190,8 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     inHeatToday: getCowsInHeatToday().length,
     predictedHeatToday: getCowsWithPredictedHeatToday().length,
     pregnancyChecksDue: getPregnancyChecksDueToday().length,
-    pregnancyChecksNeeded: getAnimalsNeedingPregnancyChecks().length
+    pregnancyChecksNeeded: getAnimalsNeedingPregnancyChecks().length,
+    cowsDueThisMonth: getCowsDueThisMonth().length
   };
 
 
@@ -452,18 +476,18 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
               {/* Quick Stats */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <button 
-                  onClick={() => setActiveFilter(activeFilter === 'totalHerd' ? null : 'totalHerd')}
+                  onClick={() => setActiveFilter(activeFilter === 'cowsDueThisMonth' ? null : 'cowsDueThisMonth')}
                   className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
-                    activeFilter === 'totalHerd' ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                    activeFilter === 'cowsDueThisMonth' ? 'ring-2 ring-green-500 bg-green-50' : ''
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-slate-600">Total Herd</p>
-                      <p className="text-3xl font-bold text-slate-900">{breedingMetrics.total}</p>
+                      <p className="text-sm font-medium text-slate-600">Cows Due This Month</p>
+                      <p className="text-3xl font-bold text-green-600">{breedingMetrics.cowsDueThisMonth}</p>
                     </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                      <Users className="w-6 h-6 text-blue-600" />
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                      <Baby className="w-6 h-6 text-green-600" />
                     </div>
                   </div>
                 </button>
@@ -527,7 +551,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                   <div className="p-6 border-b border-slate-200">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-slate-900">
-                        {activeFilter === 'totalHerd' && 'All Animals in Herd'}
+                        {activeFilter === 'cowsDueThisMonth' && 'Cows Due This Month'}
                         {activeFilter === 'inHeatToday' && 'Animals in Heat Today'}
                         {activeFilter === 'predictedHeat' && 'Animals with Predicted Heat Today'}
                         {activeFilter === 'pregnancyChecks' && 'Animals Needing Pregnancy Checks'}
@@ -548,6 +572,9 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Animal</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tag Number</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                          {activeFilter === 'cowsDueThisMonth' && (
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Due Date</th>
+                          )}
                           {activeFilter === 'pregnancyChecks' && (
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Days Since Breeding</th>
                           )}
@@ -571,13 +598,9 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                               <div className="text-sm text-slate-500">{cow.tagNumber}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {activeFilter === 'totalHerd' && (
-                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  calculateReproductiveStatus(cow) === 'PREGNANT' ? 'bg-green-100 text-green-800' :
-                                  calculateReproductiveStatus(cow) === 'BRED' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-blue-100 text-blue-800'
-                                }`}>
-                                  {calculateReproductiveStatus(cow)}
+                              {activeFilter === 'cowsDueThisMonth' && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  Pregnant
                                 </span>
                               )}
                               {activeFilter === 'inHeatToday' && (
@@ -600,6 +623,20 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                                 </span>
                               )}
                             </td>
+                            {activeFilter === 'cowsDueThisMonth' && (
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-green-600">
+                                  {cow.breedingRecords && cow.breedingRecords.length > 0 && cow.breedingRecords[cow.breedingRecords.length - 1].expectedDueDate
+                                    ? new Date(cow.breedingRecords[cow.breedingRecords.length - 1].expectedDueDate).toLocaleDateString('en-US', { 
+                                        month: 'short', 
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })
+                                    : 'Unknown'
+                                  }
+                                </div>
+                              </td>
+                            )}
                             {activeFilter === 'pregnancyChecks' && (
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className={`text-sm font-medium ${

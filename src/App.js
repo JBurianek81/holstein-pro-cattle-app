@@ -231,8 +231,7 @@ function App() {
     { id: 'herd', label: 'Herd Management', icon: Users, badge: updatedMetrics.total.value.toString() },
     { id: 'breeding', label: 'Breeding Center', icon: Heart, badge: updatedMetrics.breeding.value.toString() },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings }
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 }
   ];
 
   return (
@@ -253,18 +252,6 @@ function App() {
         </div>
 
         {/* Quick Stats */}
-        <div className="p-4 border-b border-slate-100">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 rounded-lg border border-green-100">
-              <div className="text-lg font-bold text-green-700">{updatedMetrics.pregnant.value}</div>
-              <div className="text-xs text-green-600">Pregnant</div>
-            </div>
-            <div className="bg-gradient-to-r from-orange-50 to-amber-50 p-3 rounded-lg border border-orange-100">
-              <div className="text-lg font-bold text-orange-700">{updatedMetrics.breeding.value}</div>
-              <div className="text-xs text-orange-600">In Heat</div>
-            </div>
-          </div>
-        </div>
 
         {/* Navigation */}
         <nav className="p-4 space-y-2">
@@ -552,6 +539,8 @@ function App() {
         onUpdateCow={handleUpdateCowFromProfile}
         bullInventory={bullInventory}
         onBreedingRecordSaved={handleBreedingRecordSaved}
+        onAddCow={handleSaveCow}
+        cows={cows}
       />
     </div>
   );

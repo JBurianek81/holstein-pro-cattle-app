@@ -273,6 +273,25 @@ export const createCalvingRecord = (data = {}) => {
   };
 };
 
+// Create a new calf record from calving data
+export const createCalfFromCalving = (calvingData, motherCow) => {
+  return createCowRecord({
+    tagNumber: calvingData.calfTag,
+    name: `Calf ${calvingData.calfTag}`,
+    dateOfBirth: calvingData.date,
+    gender: calvingData.calfGender,
+    category: 'Calf',
+    status: 'Active',
+    productionStatus: 'Non-Milking',
+    breed: motherCow.breed || 'Holstein', // Inherit breed from mother
+    notes: `Born to ${motherCow.name} (${motherCow.tagNumber}) on ${calvingData.date}`,
+    // Initialize empty record arrays
+    healthRecords: [],
+    breedingRecords: [],
+    calvingRecords: []
+  });
+};
+
 // Dropdown options for records
 export const HEALTH_RECORD_TYPES = [
   'Vaccination',

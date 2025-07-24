@@ -21,6 +21,7 @@ import {
   createHeatRecord,
   createBreedingRecord,
   createCalvingRecord,
+  createCalfFromCalving,
   calculateDueDate,
   calculateReproductiveStatus,
   getReproductiveStatusBadge,
@@ -125,7 +126,7 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-4 gap-6">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="text-2xl font-bold text-slate-900">{age}</div>
           <div className="text-sm text-slate-600">Current Age</div>
@@ -138,7 +139,20 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
         </div>
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="text-2xl font-bold text-slate-900">
-            {lastBreeding ? lastBreeding.result : 'No Records'}
+            {calculateReproductiveStatus(cow) === 'PREGNANT' && lastBreeding?.expectedDueDate 
+              ? new Date(lastBreeding.expectedDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              : 'Not Applicable'
+            }
+          </div>
+          <div className="text-sm text-slate-600">Due Date</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-slate-200">
+          <div className={`text-2xl font-bold ${
+            calculateReproductiveStatus(cow) === 'PREGNANT' ? 'text-green-600' :
+            calculateReproductiveStatus(cow) === 'BRED' ? 'text-yellow-600' :
+            'text-slate-600'
+          }`}>
+            {calculateReproductiveStatus(cow)}
           </div>
           <div className="text-sm text-slate-600">Last Breeding Status</div>
         </div>
@@ -525,13 +539,14 @@ const CalvingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecord
   );
 });
 
-const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved }) => {
+const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onAddCow, cows = [] }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [editingRecordType, setEditingRecordType] = useState(null);
   const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
 
   if (!isOpen || !cow) return null;
@@ -643,6 +658,35 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           newRecord = createCalvingRecord(recordData);
           updatedCow.calvingRecords = [...normalizedCow.calvingRecords, newRecord];
           console.log('Added calving record to cow:', normalizedCow.name);
+          
+          // Auto-create calf if tag number is provided and not editing existing record
+          if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && onAddCow) {
+            try {
+              // Check if calf tag already exists in herd
+              const existingCalf = cows?.find(c => c.tagNumber === recordData.calfTag.trim());
+              if (existingCalf) {
+                console.warn('Calf with tag number', recordData.calfTag, 'already exists in herd');
+                // Show warning toast or alert
+                alert(`Warning: A calf with tag number ${recordData.calfTag} already exists in the herd.`);
+                break;
+              }
+              
+              // Create new calf record
+              const newCalf = createCalfFromCalving(recordData, normalizedCow);
+              console.log('Auto-creating new calf:', newCalf.name, 'Tag:', newCalf.tagNumber);
+              
+              // Add calf to herd
+              onAddCow(newCalf);
+              
+              // Show success message
+              setToastMessage(`Calf ${recordData.calfTag} successfully added to herd!`);
+              setShowToast(true);
+              setTimeout(() => setShowToast(false), 3000);
+            } catch (error) {
+              console.error('Error creating calf:', error);
+              alert('Error creating calf record. Please try again.');
+            }
+          }
           break;
         default:
           console.error('Unknown record type:', recordType);
@@ -662,6 +706,7 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
     let updatedCow = { ...normalizedCow };
     updatedCow.healthRecords = [...normalizedCow.healthRecords, heatRecord];
     onUpdateCow(updatedCow);
+    setToastMessage('Heat recorded successfully');
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2500);
   };
@@ -687,8 +732,8 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
       {showToast && (
         <div className="fixed inset-0 flex items-center justify-center z-[9999] pointer-events-none">
           <div className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center space-x-3 transition-opacity duration-300 opacity-100 animate-fade-in-out pointer-events-auto" style={{ minWidth: 280 }}>
-            <Heart className="w-5 h-5 text-white" />
-            <span>Heat recorded successfully</span>
+            <Baby className="w-5 h-5 text-white" />
+            <span>{toastMessage || 'Heat recorded successfully'}</span>
           </div>
         </div>
       )}

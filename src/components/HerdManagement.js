@@ -1,22 +1,42 @@
 import React from 'react';
-import { Users, Search, Filter, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Heart, Activity } from 'lucide-react';
+import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar } from 'lucide-react';
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge } from '../utils/cowDataModel';
 
 const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState('all');
-  const [categoryFilter, setCategoryFilter] = React.useState('all');
+  const [activeFilter, setActiveFilter] = React.useState('all');
 
-  // Filter cows based on search and filters
+  // Filter cows based on search and active filter
   const filteredCows = cows.filter(cow => {
     const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = statusFilter === 'all' || cow.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || cow.category === categoryFilter;
+    let matchesFilter = true;
+    switch (activeFilter) {
+      case 'cows':
+        matchesFilter = cow.category === 'Cow';
+        break;
+      case 'heifers':
+        matchesFilter = cow.category === 'Heifer';
+        break;
+      case 'calves':
+        matchesFilter = cow.category === 'Calf';
+        break;
+      case 'bulls':
+        matchesFilter = cow.category === 'Bull';
+        break;
+      case 'dry':
+        matchesFilter = cow.productionStatus === 'Dry';
+        break;
+      case 'all':
+      case null:
+      default:
+        matchesFilter = true;
+        break;
+    }
     
-    return matchesSearch && matchesStatus && matchesCategory;
+    return matchesSearch && matchesFilter;
   });
 
   // Calculate age from date of birth
@@ -62,51 +82,82 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile 
         </button>
       </div>
 
-      {/* Filters and Search */}
+      {/* Search */}
       <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Search */}
-          <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search by name, tag, or breed..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
-            />
-          </div>
-
-          {/* Status Filter */}
-          <div className="flex items-center space-x-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Status</option>
-              <option value="Active">Active</option>
-              <option value="Pregnant">Pregnant</option>
-              <option value="Sold">Sold</option>
-              <option value="Died">Died</option>
-            </select>
-          </div>
-
-          {/* Category Filter */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Categories</option>
-            <option value="Cow">Cow</option>
-            <option value="Heifer">Heifer</option>
-            <option value="Calf">Calf</option>
-            <option value="Bull">Bull</option>
-            <option value="Steer">Steer</option>
-          </select>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Search by name, tag, or breed..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
+          />
         </div>
+      </div>
+
+      {/* Filter Buttons */}
+      <div className="flex items-center space-x-3">
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'all' ? null : 'all')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            (activeFilter === 'all' || activeFilter === null)
+              ? 'bg-blue-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          All Animals
+        </button>
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'cows' ? null : 'cows')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            activeFilter === 'cows' 
+              ? 'bg-green-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Cows
+        </button>
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'heifers' ? null : 'heifers')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            activeFilter === 'heifers' 
+              ? 'bg-purple-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Heifers
+        </button>
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'calves' ? null : 'calves')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            activeFilter === 'calves' 
+              ? 'bg-orange-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Calves
+        </button>
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'bulls' ? null : 'bulls')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            activeFilter === 'bulls' 
+              ? 'bg-red-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Bulls
+        </button>
+        <button
+          onClick={() => setActiveFilter(activeFilter === 'dry' ? null : 'dry')}
+          className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
+            activeFilter === 'dry' 
+              ? 'bg-yellow-600 text-white shadow-lg' 
+              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Dry
+        </button>
       </div>
 
       {/* Cow Table */}
@@ -242,56 +293,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile 
         )}
       </div>
 
-      {/* Summary Stats */}
-      {filteredCows.length > 0 && (
-        <div className="grid grid-cols-4 gap-6">
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-            <div className="flex items-center space-x-3">
-              <Users className="w-8 h-8 text-blue-600" />
-              <div>
-                <div className="text-2xl font-bold text-blue-900">{filteredCows.length}</div>
-                <div className="text-blue-700 text-sm">Total Animals</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 border border-green-100">
-            <div className="flex items-center space-x-3">
-              <Heart className="w-8 h-8 text-green-600" />
-              <div>
-                <div className="text-2xl font-bold text-green-900">
-                  {filteredCows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length}
-                </div>
-                <div className="text-green-700 text-sm">Breeding Stock</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-2xl p-6 border border-orange-100">
-            <div className="flex items-center space-x-3">
-              <Activity className="w-8 h-8 text-orange-600" />
-              <div>
-                <div className="text-2xl font-bold text-orange-900">
-                  {filteredCows.filter(cow => cow.status === 'Active').length}
-                </div>
-                <div className="text-orange-700 text-sm">Active Animals</div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-gradient-to-r from-purple-50 to-violet-50 rounded-2xl p-6 border border-purple-100">
-            <div className="flex items-center space-x-3">
-              <Tag className="w-8 h-8 text-purple-600" />
-              <div>
-                <div className="text-2xl font-bold text-purple-900">
-                  {new Set(filteredCows.map(cow => cow.breed)).size}
-                </div>
-                <div className="text-purple-700 text-sm">Breeds</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };
