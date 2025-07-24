@@ -541,6 +541,7 @@ function App() {
         onBreedingRecordSaved={handleBreedingRecordSaved}
         onAddCow={handleSaveCow}
         cows={cows}
+        onUpdateBullInventory={handleUpdateBullInventory}
       />
     </div>
   );

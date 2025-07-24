@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { 
   X, 
   User, 
@@ -32,6 +32,7 @@ import {
   CALF_HEALTH_STATUS,
   COMPLICATIONS
 } from '../utils/cowDataModel';
+
 
 // Tab components
 const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
@@ -539,7 +540,7 @@ const CalvingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecord
   );
 });
 
-const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onAddCow, cows = [] }) => {
+const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onAddCow, cows = [], onUpdateBullInventory }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -547,6 +548,8 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
   const [editingRecordType, setEditingRecordType] = useState(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [showBullModal, setShowBullModal] = useState(false);
+  const [editingBull, setEditingBull] = useState(null);
 
 
   if (!isOpen || !cow) return null;
@@ -653,11 +656,6 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           newRecord = createBreedingRecord(recordData);
           updatedCow.breedingRecords = [...normalizedCow.breedingRecords, newRecord];
           console.log('Added breeding record to cow:', normalizedCow.name);
-          break;
-        case 'calving':
-          newRecord = createCalvingRecord(recordData);
-          updatedCow.calvingRecords = [...normalizedCow.calvingRecords, newRecord];
-          console.log('Added calving record to cow:', normalizedCow.name);
           
           // Auto-create calf if tag number is provided and not editing existing record
           if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && onAddCow) {
@@ -687,6 +685,11 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
               alert('Error creating calf record. Please try again.');
             }
           }
+          break;
+        case 'calving':
+          newRecord = createCalvingRecord(recordData);
+          updatedCow.calvingRecords = [...normalizedCow.calvingRecords, newRecord];
+          console.log('Added calving record to cow:', normalizedCow.name);
           break;
         default:
           console.error('Unknown record type:', recordType);
@@ -724,6 +727,34 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
     
     console.log('Added pregnancy confirmation record for cow:', normalizedCow.name);
     onUpdateCow(updatedCow);
+  };
+
+  // Bull inventory handlers
+  const handleAddBull = () => {
+    console.log('🐄 handleAddBull called - opening bull modal');
+    setEditingBull(null);
+    setShowBullModal(true);
+    console.log('🐄 showBullModal set to true');
+  };
+
+  const handleCloseBullModal = () => {
+    console.log('🐄 handleCloseBullModal called - closing bull modal');
+    setShowBullModal(false);
+    setEditingBull(null);
+  };
+
+  const handleSaveBull = (bull) => {
+    if (editingBull !== null) {
+      // Editing existing bull
+      const updatedInventory = bullInventory.map((b, i) => i === editingBull.index ? bull : b);
+      onUpdateBullInventory(updatedInventory);
+      setEditingBull(null);
+    } else {
+      // Adding new bull
+      const updatedInventory = [...bullInventory, bull];
+      onUpdateBullInventory(updatedInventory);
+    }
+    setShowBullModal(false);
   };
 
   return (
@@ -852,13 +883,28 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
         onBreedingRecordSaved={onBreedingRecordSaved}
         onUpdateCow={onUpdateCow}
         selectedCow={normalizedCow}
+        onAddBull={handleAddBull}
       />
+
+      {/* Bull Inventory Modal */}
+      {console.log('🐄 Checking showBullModal state:', showBullModal)}
+      {showBullModal && (
+        <>
+          {console.log('🐄 Rendering BullInventoryModal, showBullModal:', showBullModal)}
+          <BullInventoryModal
+            isOpen={showBullModal}
+            onClose={handleCloseBullModal}
+            onSave={handleSaveBull}
+            editingBull={editingBull}
+          />
+        </>
+      )}
     </>
   );
 };
 
 // Add Record Modal Component
-const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [], onClose, onSave, onBreedingRecordSaved, onUpdateCow = () => {}, selectedCow }) => {
+const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [], onClose, onSave, onBreedingRecordSaved, onUpdateCow = () => {}, selectedCow, onAddBull }) => {
   const [formData, setFormData] = useState({});
   const [selectedBull, setSelectedBull] = useState(null);
 
@@ -880,6 +926,8 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
       }));
     }
   };
+
+
 
   // Reset form when modal opens/closes
   React.useEffect(() => {
@@ -1084,24 +1132,37 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
                 </label>
                 
                 {field.type === 'select' ? (
-                  <select
-                    value={formData[field.name] || ''}
-                    onChange={(e) => {
-                      handleFieldChange(field.name, e.target.value);
-                      if (field.onChange) {
-                        field.onChange(e.target.value);
-                      }
-                    }}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required={field.required}
-                  >
-                    <option value="">{field.placeholder || `Select ${field.label}`}</option>
-                    {field.options.map(option => (
-                      <option key={option.value || option} value={option.value || option}>
-                        {option.label || option}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={formData[field.name] || ''}
+                      onChange={(e) => {
+                        handleFieldChange(field.name, e.target.value);
+                        if (field.onChange) {
+                          field.onChange(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required={field.required}
+                    >
+                      <option value="">{field.placeholder || `Select ${field.label}`}</option>
+                      {field.options.map(option => (
+                        <option key={option.value || option} value={option.value || option}>
+                          {option.label || option}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Add Bull link under Bull Selection dropdown */}
+                    {recordType === 'breeding' && field.name === 'bullSelection' && (
+                      <button
+                        type="button"
+                        className="mt-1 text-xs text-blue-600 underline hover:text-blue-800 focus:outline-none"
+                        style={{ display: 'block' }}
+                        onClick={onAddBull}
+                      >
+                        Add Bull
+                      </button>
+                    )}
+                  </>
                 ) : field.type === 'textarea' ? (
                   <textarea
                     value={formData[field.name] || ''}
@@ -1166,8 +1227,138 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
           </button>
         </div>
       </div>
+
     </div>
   );
 };
+
+// Bull Inventory Modal Component (embedded from BreedingCenter.js)
+function BullInventoryModal({ isOpen, onClose, onSave, editingBull }) {
+  console.log('🐄 BullInventoryModal props - isOpen:', isOpen, 'editingBull:', editingBull);
+  const [form, setForm] = useState({
+    name: '',
+    naabCode: '',
+    straws: '',
+    cost: '',
+    tank: '',
+    canister: '',
+    purchaseDate: '',
+    supplier: ''
+  });
+  const [errors, setErrors] = useState({});
+
+  // Pre-populate form when editing
+  useEffect(() => {
+    if (editingBull) {
+      setForm({
+        name: editingBull.name || '',
+        naabCode: editingBull.naabCode || '',
+        straws: editingBull.straws || '',
+        cost: editingBull.cost || '',
+        tank: editingBull.tank || '',
+        canister: editingBull.canister || '',
+        purchaseDate: editingBull.purchaseDate || '',
+        supplier: editingBull.supplier || ''
+      });
+    } else {
+      setForm({
+        name: '',
+        naabCode: '',
+        straws: '',
+        cost: '',
+        tank: '',
+        canister: '',
+        purchaseDate: '',
+        supplier: ''
+      });
+    }
+  }, [editingBull]);
+
+  const validate = () => {
+    const errs = {};
+    if (!form.name.trim()) errs.name = 'Required';
+    if (!form.naabCode.trim() || !/^\w{3,}-?\w{2,}$/.test(form.naabCode)) errs.naabCode = 'Valid NAAB code required';
+    if (!form.straws || isNaN(form.straws) || Number(form.straws) < 0) errs.straws = 'Required, must be a number';
+    if (!form.cost || isNaN(form.cost) || Number(form.cost) < 0) errs.cost = 'Required, must be a number';
+    return errs;
+  };
+
+  const handleChange = (e) => {
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length === 0) {
+      onSave({ ...form, straws: Number(form.straws), cost: Number(form.cost) });
+      setForm({ name: '', naabCode: '', straws: '', cost: '', tank: '', canister: '', purchaseDate: '', supplier: '' });
+    }
+  };
+
+  if (!isOpen) {
+    console.log('🐄 BullInventoryModal early return - isOpen is false');
+    return null;
+  }
+  console.log('🐄 BullInventoryModal rendering with isOpen:', isOpen);
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center" style={{ zIndex: 9999 }}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-8 relative">
+        <button className="absolute top-4 right-4 text-slate-400 hover:text-slate-700" onClick={onClose}>&times;</button>
+        <h2 className="text-2xl font-bold mb-4">{editingBull ? 'Edit Bull' : 'Add Bull to Inventory'}</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block font-medium">Bull Name *</label>
+            <input name="name" value={form.name} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            {errors.name && <div className="text-red-500 text-xs">{errors.name}</div>}
+          </div>
+          <div>
+            <label className="block font-medium">NAAB Code *</label>
+            <input name="naabCode" value={form.naabCode} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            {errors.naabCode && <div className="text-red-500 text-xs">{errors.naabCode}</div>}
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Initial Straw Count *</label>
+              <input name="straws" type="number" value={form.straws} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+              {errors.straws && <div className="text-red-500 text-xs">{errors.straws}</div>}
+            </div>
+            <div>
+              <label className="block font-medium">Cost per Straw ($) *</label>
+              <input name="cost" type="number" value={form.cost} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+              {errors.cost && <div className="text-red-500 text-xs">{errors.cost}</div>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Tank Location</label>
+              <input name="tank" value={form.tank} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div>
+              <label className="block font-medium">Canister Number</label>
+              <input name="canister" value={form.canister} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block font-medium">Purchase Date</label>
+              <input name="purchaseDate" type="date" value={form.purchaseDate} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+            <div>
+              <label className="block font-medium">Supplier/Company</label>
+              <input name="supplier" value={form.supplier} onChange={handleChange} className="w-full border rounded px-3 py-2" />
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700">
+              {editingBull ? 'Update Bull' : 'Add Bull'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default CowProfileModal; 
