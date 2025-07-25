@@ -4,7 +4,6 @@ import {
   Users, 
   Calendar, 
   BarChart3, 
-  Settings, 
   Bell,
   Plus,
   Activity,
@@ -14,7 +13,9 @@ import {
   Search,
   Camera,
   Award,
-  Target
+  Target,
+  CheckCircle,
+  Archive
 } from 'lucide-react';
 import AddCowModal from './components/AddCowModal';
 import HerdManagement from './components/HerdManagement';
@@ -24,6 +25,7 @@ import CalendarView from './components/CalendarView';
 import AnalyticsView from './components/AnalyticsView';
 import TodaysTasks from './components/TodaysTasks';
 import SettingsView from './components/SettingsView';
+import ArchivedAnimals from './components/ArchivedAnimals';
 import { calculateReproductiveStatus } from './utils/cowDataModel';
 
 function App() {
@@ -63,33 +65,258 @@ function App() {
     console.log('💾 Saved cows to localStorage:', cows.length);
   }, [cows]);
 
-  // Priority alerts with visual hierarchy
-  const alerts = [
-    { 
-      id: 1, 
-      cow: 'Luna #H-003', 
-      message: 'Optimal breeding window - 12 hours remaining', 
-      priority: 'critical',
-      type: 'breeding',
-      time: '2 hours ago'
-    },
-    { 
-      id: 2, 
-      cow: 'Bella #H-001', 
-      message: 'Pregnancy check overdue', 
-      priority: 'high',
-      type: 'health',
-      time: '1 day ago'
-    },
-    { 
-      id: 3, 
-      cow: 'Daisy #H-002', 
-      message: 'Due for vaccination', 
-      priority: 'medium',
-      type: 'routine',
-      time: '3 days ago'
-    }
-  ];
+  // Generate comprehensive dynamic priority alerts from cow records
+  const generatePriorityAlerts = () => {
+    const alerts = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    cows.forEach(cow => {
+      // 1. Optimal Breeding Window Alerts (Critical Priority)
+      if (cow.healthRecords) {
+        const heatRecords = cow.healthRecords.filter(record => 
+          record.type === 'Heat Detection' && record.date
+        );
+        
+        heatRecords.forEach(heatRecord => {
+          const heatDate = new Date(heatRecord.date);
+          const hoursSinceHeat = (now - heatDate) / (1000 * 60 * 60);
+          
+          // Optimal breeding window is 12-18 hours after heat detection
+          if (hoursSinceHeat >= 12 && hoursSinceHeat <= 18) {
+            const hoursRemaining = Math.max(0, 18 - hoursSinceHeat);
+            alerts.push({
+              id: `breeding-${cow.id}-${heatRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Optimal breeding window - ${Math.round(hoursRemaining)} hours remaining`,
+              priority: 'critical',
+              type: 'breeding',
+              time: `${Math.round(hoursSinceHeat)} hours ago`,
+              cowId: cow.id
+            });
+          }
+        });
+      }
+      
+      // 2. Calving Alerts
+      if (cow.breedingRecords && cow.breedingRecords.length > 0) {
+        const lastBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+        if (lastBreeding.expectedDueDate) {
+          const dueDate = new Date(lastBreeding.expectedDueDate);
+          const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
+          
+          // Overdue calving (past due date) - Critical Priority
+          if (daysUntilDue < 0) {
+            const daysOverdue = Math.abs(daysUntilDue);
+            alerts.push({
+              id: `calving-overdue-${cow.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Calving overdue by ${daysOverdue} days`,
+              priority: 'critical',
+              type: 'calving',
+              time: `${daysOverdue} days overdue`,
+              cowId: cow.id
+            });
+          }
+          // Due this week (within 7 days) - High Priority
+          else if (daysUntilDue <= 7) {
+            alerts.push({
+              id: `calving-due-${cow.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Due to calve in ${daysUntilDue} days`,
+              priority: 'high',
+              type: 'calving',
+              time: daysUntilDue === 0 ? 'Due today' : `${daysUntilDue} days`,
+              cowId: cow.id
+            });
+          }
+          // Close monitoring needed (within 5 days) - High Priority
+          else if (daysUntilDue <= 5) {
+            alerts.push({
+              id: `calving-monitoring-${cow.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Close monitoring needed - calving in ${daysUntilDue} days`,
+              priority: 'high',
+              type: 'calving',
+              time: `${daysUntilDue} days`,
+              cowId: cow.id
+            });
+          }
+        }
+      }
+      
+      // 3. Comprehensive Medical/Health Alerts
+      if (cow.healthRecords) {
+        // Vaccination schedules
+        const vaccinationRecords = cow.healthRecords.filter(record => 
+          record.type === 'Vaccination' && record.date
+        );
+        
+        vaccinationRecords.forEach(vaccRecord => {
+          const vaccDate = new Date(vaccRecord.date);
+          const daysSinceVacc = Math.round((today - vaccDate) / (1000 * 60 * 60 * 24));
+          const vaccInterval = parseInt(vaccRecord.duration) || 365; // Default 1 year
+          
+          if (daysSinceVacc >= vaccInterval) {
+            const daysOverdue = daysSinceVacc - vaccInterval;
+            const priority = daysOverdue > 30 ? 'high' : 'medium';
+            const timeText = daysOverdue > 0 ? `${daysOverdue} days overdue` : 'Due today';
+            
+            alerts.push({
+              id: `vaccination-${cow.id}-${vaccRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Vaccination due: ${vaccRecord.description || vaccRecord.medicine || 'vaccination'}`,
+              priority: priority,
+              type: 'health',
+              time: timeText,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Deworming treatments
+        const dewormingRecords = cow.healthRecords.filter(record => 
+          record.type === 'Treatment' && record.description && 
+          record.description.toLowerCase().includes('deworm')
+        );
+        
+        dewormingRecords.forEach(dewormRecord => {
+          const dewormDate = new Date(dewormRecord.date);
+          const daysSinceDeworm = Math.round((today - dewormDate) / (1000 * 60 * 60 * 24));
+          const dewormInterval = parseInt(dewormRecord.duration) || 90; // Default 3 months
+          
+          if (daysSinceDeworm >= dewormInterval) {
+            const daysOverdue = daysSinceDeworm - dewormInterval;
+            const timeText = daysOverdue > 0 ? `${daysOverdue} days overdue` : 'Due today';
+            
+            alerts.push({
+              id: `deworming-${cow.id}-${dewormRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: 'Deworming treatment due',
+              priority: 'medium',
+              type: 'health',
+              time: timeText,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Hoof trimming
+        const hoofRecords = cow.healthRecords.filter(record => 
+          record.type === 'Treatment' && record.description && 
+          record.description.toLowerCase().includes('hoof')
+        );
+        
+        hoofRecords.forEach(hoofRecord => {
+          const hoofDate = new Date(hoofRecord.date);
+          const daysSinceHoof = Math.round((today - hoofDate) / (1000 * 60 * 60 * 24));
+          const hoofInterval = parseInt(hoofRecord.duration) || 180; // Default 6 months
+          
+          if (daysSinceHoof >= hoofInterval) {
+            const daysOverdue = daysSinceHoof - hoofInterval;
+            const timeText = daysOverdue > 0 ? `${daysOverdue} days overdue` : 'Due today';
+            
+            alerts.push({
+              id: `hoof-${cow.id}-${hoofRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: 'Hoof trimming overdue',
+              priority: 'medium',
+              type: 'health',
+              time: timeText,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Injury follow-ups
+        const injuryRecords = cow.healthRecords.filter(record => 
+          record.type === 'Injury' && record.date
+        );
+        
+        injuryRecords.forEach(injuryRecord => {
+          const injuryDate = new Date(injuryRecord.date);
+          const daysSinceInjury = Math.round((today - injuryDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if follow-up is needed (within 30 days of injury)
+          if (daysSinceInjury <= 30 && !injuryRecord.followUpCompleted) {
+            alerts.push({
+              id: `injury-followup-${cow.id}-${injuryRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Injury follow-up needed: ${injuryRecord.description || 'injury'}`,
+              priority: 'high',
+              type: 'health',
+              time: `${daysSinceInjury} days ago`,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Illness treatments in progress
+        const illnessRecords = cow.healthRecords.filter(record => 
+          record.type === 'Illness' && record.date
+        );
+        
+        illnessRecords.forEach(illnessRecord => {
+          const illnessDate = new Date(illnessRecord.date);
+          const daysSinceIllness = Math.round((today - illnessDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if treatment is still in progress (within 14 days)
+          if (daysSinceIllness <= 14 && !illnessRecord.treatmentCompleted) {
+            alerts.push({
+              id: `illness-treatment-${cow.id}-${illnessRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Illness treatment in progress: ${illnessRecord.description || 'illness'}`,
+              priority: 'high',
+              type: 'health',
+              time: `${daysSinceIllness} days ago`,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        
+      }
+      
+      // 4. Pregnancy checks due (if cow is BRED status)
+      const reproductiveStatus = calculateReproductiveStatus(cow);
+      if (reproductiveStatus === 'BRED' && cow.breedingRecords && cow.breedingRecords.length > 0) {
+        const lastBreeding = cow.breedingRecords[cow.breedingRecords.length - 1];
+        const breedingDate = new Date(lastBreeding.date);
+        const daysSinceBreeding = Math.round((today - breedingDate) / (1000 * 60 * 60 * 24));
+        
+        // Pregnancy check typically due around 40 days after breeding
+        if (daysSinceBreeding >= 40) {
+          const daysOverdue = daysSinceBreeding - 40;
+          const priority = daysOverdue > 7 ? 'high' : 'medium';
+          const timeText = daysOverdue > 0 ? `${daysOverdue} days overdue` : 'Due today';
+          
+          alerts.push({
+            id: `pregnancy-${cow.id}`,
+            cow: `${cow.name} #${cow.tagNumber}`,
+            message: 'Pregnancy check due',
+            priority: priority,
+            type: 'health',
+            time: timeText,
+            cowId: cow.id
+          });
+        }
+      }
+    });
+    
+    // Sort alerts by priority (critical > high > medium) and then by urgency
+    const priorityOrder = { critical: 3, high: 2, medium: 1 };
+    return alerts.sort((a, b) => {
+      // First sort by priority
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      
+      // Then sort by type (calving > breeding > health)
+      const typeOrder = { calving: 3, breeding: 2, health: 1 };
+      return typeOrder[b.type] - typeOrder[a.type];
+    });
+  };
+
+  const alerts = generatePriorityAlerts();
 
   // Cow management functions
   const handleAddCow = () => {
@@ -138,6 +365,30 @@ function App() {
   const handleDeleteCow = (cowId) => {
       setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
     console.log('🗑️ Deleted cow with ID:', cowId);
+  };
+
+  // Archive management functions
+  const handleRestoreCow = (cowId) => {
+    setCows(prevCows => prevCows.map(cow => 
+      cow.id === cowId 
+        ? { ...cow, archived: false, archivedDate: null, archiveReason: '' }
+        : cow
+    ));
+    console.log('🔄 Restored cow with ID:', cowId);
+  };
+
+  const handlePermanentlyDeleteCow = (cowId) => {
+    setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
+    console.log('🗑️ Permanently deleted cow with ID:', cowId);
+  };
+
+  const handleArchiveCow = (cowId, archiveReason) => {
+    setCows(prevCows => prevCows.map(cow => 
+      cow.id === cowId 
+        ? { ...cow, archived: true, archivedDate: new Date().toISOString(), archiveReason }
+        : cow
+    ));
+    console.log('📦 Archived cow with ID:', cowId, 'Reason:', archiveReason);
   };
 
   const handleCloseModal = () => {
@@ -231,7 +482,8 @@ function App() {
     { id: 'herd', label: 'Herd Management', icon: Users, badge: updatedMetrics.total.value.toString() },
     { id: 'breeding', label: 'Breeding Center', icon: Heart, badge: updatedMetrics.breeding.value.toString() },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 }
+    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'archived', label: 'Archived Animals', icon: Archive, badge: cows.filter(cow => cow.archived === true).length.toString() }
   ];
 
   return (
@@ -305,6 +557,7 @@ function App() {
               <h2 className="text-2xl font-bold text-slate-900">
                 {currentView === 'dashboard' && 'Dashboard'}
                 {currentView === 'herd' && 'Herd Management'}
+                {currentView === 'archived' && 'Archived Animals'}
                 {currentView === 'breeding' && 'Breeding Center'}
                 {currentView === 'calendar' && 'Calendar'}
                 {currentView === 'analytics' && 'Analytics'}
@@ -428,27 +681,45 @@ function App() {
                         </div>
                 <div className="p-6">
                   <div className="space-y-4">
-                    {alerts.map((alert) => (
-                      <div key={alert.id} className="flex items-start space-x-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
-                        <div className={`w-3 h-3 rounded-full mt-2 ${
-                          alert.priority === 'critical' ? 'bg-red-500' :
-                          alert.priority === 'high' ? 'bg-orange-500' : 'bg-yellow-500'
-                        }`}></div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium text-slate-900">{alert.cow}</p>
-                            <span className="text-sm text-slate-500">{alert.time}</span>
+                    {alerts.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                        <p className="text-slate-500">No priority alerts at this time</p>
+                        <p className="text-sm text-slate-400 mt-1">All animals are up to date</p>
                       </div>
-                          <p className="text-sm text-slate-600 mt-1">{alert.message}</p>
-                    </div>
-                        <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
-                          View
-                        </button>
-                    </div>
-                    ))}
-                                </div>
-                                  </div>
-                                </div>
+                    ) : (
+                      alerts.map((alert) => (
+                        <div key={alert.id} className="flex items-start space-x-4 p-4 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
+                          <div className={`w-3 h-3 rounded-full mt-2 ${
+                            alert.priority === 'critical' ? 'bg-red-500' :
+                            alert.priority === 'high' ? 'bg-orange-500' : 'bg-yellow-500'
+                          }`}></div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium text-slate-900">{alert.cow}</p>
+                              <span className="text-sm text-slate-500">{alert.time}</span>
+                            </div>
+                            <p className="text-sm text-slate-600 mt-1">{alert.message}</p>
+                          </div>
+                          <button 
+                            onClick={() => {
+                              const cow = cows.find(c => c.id === alert.cowId);
+                              if (cow) {
+                                handleViewProfile(cow);
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          >
+                            View
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {/* Quick Actions */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
@@ -488,6 +759,17 @@ function App() {
               onAddCow={handleAddCow}
               onEditCow={handleEditCow}
               onDeleteCow={handleDeleteCow}
+              onViewProfile={handleViewProfile}
+              onArchiveCow={handleArchiveCow}
+            />
+          )}
+
+          {/* Archived Animals View */}
+          {currentView === 'archived' && (
+            <ArchivedAnimals
+              cows={cows}
+              onRestoreCow={handleRestoreCow}
+              onPermanentlyDeleteCow={handlePermanentlyDeleteCow}
               onViewProfile={handleViewProfile}
             />
           )}

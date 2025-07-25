@@ -48,6 +48,14 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
   // Get today's date string
   const today = new Date().toISOString().split('T')[0];
 
+  // Calculate age in months
+  const calculateAgeInMonths = (dateOfBirth) => {
+    if (!dateOfBirth) return 0;
+    const birth = new Date(dateOfBirth);
+    const today = new Date();
+    return (today.getFullYear() - birth.getFullYear()) * 12 + (today.getMonth() - birth.getMonth());
+  };
+
   // Filter cows based on search and breeding status
   const filteredCows = cows.filter(cow => {
     const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -66,7 +74,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     'PREGNANT': filteredCows.filter(cow => calculateReproductiveStatus(cow) === 'PREGNANT')
   };
 
-  // Get cows in heat today
+  // Get cows in heat today (all ages)
   const getCowsInHeatToday = () => {
     return cows.filter(cow => {
       if (!cow.healthRecords) return false;
@@ -76,7 +84,19 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     });
   };
 
-  // Get cows with predicted heat today
+  // Get cows in heat today that are 15+ months old (for breeding priorities)
+  const getBreedingReadyCowsInHeatToday = () => {
+    return cows.filter(cow => {
+      if (!cow.healthRecords) return false;
+      const isInHeat = cow.healthRecords.some(record => 
+        record.type === 'Heat Detection' && record.date === today
+      );
+      const ageInMonths = calculateAgeInMonths(cow.dateOfBirth);
+      return isInHeat && ageInMonths >= 15;
+    });
+  };
+
+  // Get cows with predicted heat today (all ages)
   const getCowsWithPredictedHeatToday = () => {
     return cows.filter(cow => {
       if (!cow.healthRecords) return false;
@@ -90,6 +110,24 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
       predictedHeat.setDate(predictedHeat.getDate() + 21); // 21-day cycle
       
       return predictedHeat.toISOString().split('T')[0] === today;
+    });
+  };
+
+  // Get cows with predicted heat today that are 15+ months old (for breeding priorities)
+  const getBreedingReadyCowsWithPredictedHeatToday = () => {
+    return cows.filter(cow => {
+      if (!cow.healthRecords) return false;
+      
+      // Find the most recent heat detection
+      const heatRecords = cow.healthRecords.filter(record => record.type === 'Heat Detection');
+      if (heatRecords.length === 0) return false;
+      
+      const lastHeat = new Date(heatRecords[heatRecords.length - 1].date);
+      const predictedHeat = new Date(lastHeat);
+      predictedHeat.setDate(predictedHeat.getDate() + 21); // 21-day cycle
+      
+      const ageInMonths = calculateAgeInMonths(cow.dateOfBirth);
+      return predictedHeat.toISOString().split('T')[0] === today && ageInMonths >= 15;
     });
   };
 
@@ -191,7 +229,10 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     predictedHeatToday: getCowsWithPredictedHeatToday().length,
     pregnancyChecksDue: getPregnancyChecksDueToday().length,
     pregnancyChecksNeeded: getAnimalsNeedingPregnancyChecks().length,
-    cowsDueThisMonth: getCowsDueThisMonth().length
+    cowsDueThisMonth: getCowsDueThisMonth().length,
+    // Age-filtered metrics for breeding priorities
+    breedingReadyInHeatToday: getBreedingReadyCowsInHeatToday().length,
+    breedingReadyPredictedHeatToday: getBreedingReadyCowsWithPredictedHeatToday().length
   };
 
 
@@ -691,20 +732,21 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
               <div className="bg-gradient-to-r from-pink-50 to-red-50 rounded-2xl p-6 border border-pink-200">
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Today's Breeding Priorities</h3>
                 
-                {/* Cows in Heat Today */}
-                {breedingMetrics.inHeatToday > 0 && (
+                {/* Breeding Ready Cows in Heat Today (15+ months old) */}
+                {breedingMetrics.breedingReadyInHeatToday > 0 && (
                   <div className="mb-6">
                     <h4 className="font-medium text-red-700 mb-3 flex items-center space-x-2">
                       <Thermometer className="w-4 h-4" />
-                      <span>Cows in Heat Today ({breedingMetrics.inHeatToday})</span>
+                      <span>Breeding Ready Cows in Heat Today ({breedingMetrics.breedingReadyInHeatToday})</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {getCowsInHeatToday().map(cow => (
+                      {getBreedingReadyCowsInHeatToday().map(cow => (
                         <div key={cow.id} className="bg-white rounded-lg p-3 border border-red-200">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-medium text-slate-900">{cow.name}</p>
                               <p className="text-sm text-slate-600">{cow.tagNumber}</p>
+                              <p className="text-xs text-slate-500">{calculateAgeInMonths(cow.dateOfBirth)} months old</p>
                             </div>
                             <button
                               onClick={() => onViewProfile(cow)}
@@ -719,20 +761,21 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                   </div>
                 )}
 
-                {/* Predicted Heat Today */}
-                {breedingMetrics.predictedHeatToday > 0 && (
+                {/* Breeding Ready Predicted Heat Today (15+ months old) */}
+                {breedingMetrics.breedingReadyPredictedHeatToday > 0 && (
                   <div className="mb-6">
                     <h4 className="font-medium text-orange-700 mb-3 flex items-center space-x-2">
                       <Clock className="w-4 h-4" />
-                      <span>Predicted Heat Today ({breedingMetrics.predictedHeatToday})</span>
+                      <span>Breeding Ready Predicted Heat Today ({breedingMetrics.breedingReadyPredictedHeatToday})</span>
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {getCowsWithPredictedHeatToday().map(cow => (
+                      {getBreedingReadyCowsWithPredictedHeatToday().map(cow => (
                         <div key={cow.id} className="bg-white rounded-lg p-3 border border-orange-200">
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-medium text-slate-900">{cow.name}</p>
                               <p className="text-sm text-slate-600">{cow.tagNumber}</p>
+                              <p className="text-xs text-slate-500">{calculateAgeInMonths(cow.dateOfBirth)} months old</p>
                             </div>
                             <button
                               onClick={() => recordHeatDetection(cow)}
@@ -747,9 +790,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                   </div>
                 )}
 
-
-
-                {breedingMetrics.inHeatToday === 0 && breedingMetrics.predictedHeatToday === 0 && (
+                {breedingMetrics.breedingReadyInHeatToday === 0 && breedingMetrics.breedingReadyPredictedHeatToday === 0 && (
                   <div className="text-center py-8">
                     <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
                     <p className="text-slate-600">No breeding priorities for today!</p>

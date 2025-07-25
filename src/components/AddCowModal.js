@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, AlertCircle, Calendar, Tag, User, Dna, Users, Activity, FileText } from 'lucide-react';
+import { X, Save, AlertCircle, Calendar, Tag, User, Dna, Users, Activity, FileText, MapPin } from 'lucide-react';
 import { 
   createCowRecord, 
   validateCowData, 
@@ -22,6 +22,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
     productionStatus: 'Non-Milking',
     dam: '',
     sire: '',
+    location: '',
     notes: ''
   });
   
@@ -42,6 +43,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         productionStatus: editingCow.productionStatus || 'Non-Milking',
         dam: editingCow.dam || '',
         sire: editingCow.sire || '',
+        location: editingCow.location || '',
         notes: editingCow.notes || ''
       });
     } else {
@@ -56,6 +58,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         productionStatus: 'Non-Milking',
         dam: '',
         sire: '',
+        location: '',
         notes: ''
       });
     }
@@ -298,6 +301,21 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-2">
+                <MapPin className="w-4 h-4" />
+                <span>Location</span>
+              </label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) => handleChange('location', e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="e.g., Barn A, Pasture 1, Field 3"
+              />
             </div>
           </div>
 

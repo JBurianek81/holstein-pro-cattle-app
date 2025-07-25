@@ -45,6 +45,7 @@ export const createCowRecord = (data = {}) => {
     productionStatus: data.productionStatus || 'Non-Milking',
     dam: data.dam || '', // Mother
     sire: data.sire || '', // Father
+    location: data.location || '', // Location
     notes: data.notes || '',
     
     // Reproductive status fields
@@ -54,6 +55,11 @@ export const createCowRecord = (data = {}) => {
     // System fields
     createdAt: data.createdAt || new Date().toISOString(),
     updatedAt: data.updatedAt || new Date().toISOString(),
+    
+    // Archive fields
+    archived: data.archived || false,
+    archivedDate: data.archivedDate || null,
+    archiveReason: data.archiveReason || '',
 
     // Record arrays for profile modal
     healthRecords: data.healthRecords || [],
