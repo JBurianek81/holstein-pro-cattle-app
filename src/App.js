@@ -29,14 +29,14 @@ import { calculateReproductiveStatus } from './utils/cowDataModel';
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [notifications] = useState(3);
-  
+
   // Cow management state
   const [cows, setCows] = useState([]);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
   const [profileCow, setProfileCow] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  
+
   // Bull inventory state
   const [bullInventory, setBullInventory] = useState([
     { name: "Champion's Pride", naabCode: "BULL-001", straws: 150, cost: 100, tank: "Tank A", canister: "C-001", purchaseDate: "2024-01-10", supplier: "Genetics Inc." },
@@ -107,11 +107,11 @@ function App() {
     try {
       // Calculate and set reproductive status
       const reproductiveStatus = calculateReproductiveStatus(cowData);
-      const cowWithStatus = {
-        ...cowData,
+      const cowWithStatus = { 
+        ...cowData, 
         reproductiveStatus: reproductiveStatus
       };
-
+      
       if (editingCow) {
         // Update existing cow
         setCows(prevCows => 
@@ -136,7 +136,7 @@ function App() {
 
   // Cow deletion function (will be used in Herd Management page)
   const handleDeleteCow = (cowId) => {
-    setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
+      setCows(prevCows => prevCows.filter(cow => cow.id !== cowId));
     console.log('🗑️ Deleted cow with ID:', cowId);
   };
 
@@ -164,8 +164,8 @@ function App() {
       reproductiveStatus: reproductiveStatus
     };
 
-    setCows(prevCows => 
-      prevCows.map(cow => 
+      setCows(prevCows => 
+        prevCows.map(cow => 
         cow.id === updatedCow.id ? cowWithStatus : cow
       )
     );
@@ -173,7 +173,7 @@ function App() {
     // Also update the profileCow state to reflect changes immediately
     setProfileCow(cowWithStatus);
     console.log('✅ Updated cow profile for:', cowWithStatus.name);
-  };
+        };
 
   // Bull inventory management functions
   const handleUpdateBullInventory = (updatedBullInventory) => {
@@ -183,10 +183,10 @@ function App() {
 
   const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId) => {
     console.log('🐄 handleBreedingRecordSaved called with:', { cow: cow.name, breedingRecord, selectedBullId });
-    
+
     // Note: Breeding record is already added to cow via onUpdateCow in CowProfileModal
     // This function only handles bull inventory updates
-    
+
     // Reduce bull straw count by 1
     setBullInventory(prevInventory => {
       const updatedInventory = prevInventory.map(bull => 
@@ -216,7 +216,7 @@ function App() {
     // Note: In a real implementation, you would pass a filter state to HerdManagement
     // For now, we'll just navigate to the herd management view
   };
-
+  
   // Update metrics based on current cows data
   const updatedMetrics = {
     total: { value: cows.length, change: '+12', trend: 'up' },
@@ -256,25 +256,25 @@ function App() {
         {/* Navigation */}
         <nav className="p-4 space-y-2">
           {navigationItems.map((item) => (
-            <button
-              key={item.id}
+                <button
+                  key={item.id}
               onClick={() => setCurrentView(item.id)}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all duration-200 ${
                 currentView === item.id
                   ? 'bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-200 shadow-sm'
                   : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center space-x-3">
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
                 <item.icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
-              </div>
-              {item.badge && (
+                    <span className="font-medium">{item.label}</span>
+                  </div>
+                  {item.badge && (
                 <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">
-                  {item.badge}
-                </span>
-              )}
-            </button>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
           ))}
         </nav>
 
@@ -290,7 +290,7 @@ function App() {
             <div className="flex-1 min-w-0 text-left">
               <p className="text-sm font-medium text-slate-900 truncate">Jason Burianek</p>
               <p className="text-xs text-slate-500">Farm Manager</p>
-            </div>
+              </div>
             <Bell className="w-4 h-4 text-slate-400" />
           </button>
         </div>
@@ -314,20 +314,20 @@ function App() {
                 <div className="flex items-center space-x-2 text-sm text-slate-500">
                   <Activity className="w-4 h-4" />
                   <span>Last updated: {new Date().toLocaleTimeString()}</span>
-                </div>
-              )}
             </div>
-            
+                )}
+              </div>
+              
             <div className="flex items-center space-x-4">
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
+                <input 
+                  type="text" 
                   placeholder="Search cattle, records..."
                   className="pl-10 pr-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-              </div>
+                          </div>
               
               {/* Notifications */}
               <button className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors">
@@ -337,7 +337,7 @@ function App() {
                     {notifications}
                   </span>
                 )}
-              </button>
+                          </button>
             </div>
           </div>
         </header>
@@ -358,7 +358,7 @@ function App() {
                     <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
-                  </div>
+                    </div>
                   <div className="mt-4 flex items-center space-x-2">
                     <TrendingUp className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-green-600">{updatedMetrics.total.change}</span>
@@ -375,48 +375,48 @@ function App() {
                     <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                       <Heart className="w-6 h-6 text-green-600" />
                     </div>
-                  </div>
+                    </div>
                   <div className="mt-4 flex items-center space-x-2">
                     <TrendingUp className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-green-600">{updatedMetrics.pregnant.change}</span>
                     <span className="text-sm text-slate-500">from last month</span>
                   </div>
-                </div>
+                    </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">In Heat</p>
                       <p className="text-3xl font-bold text-slate-900">{updatedMetrics.breeding.value}</p>
-                    </div>
+                  </div>
                     <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                       <Zap className="w-6 h-6 text-orange-600" />
-                    </div>
+                </div>
                   </div>
                   <div className="mt-4 flex items-center space-x-2">
                     <TrendingUp className="w-4 h-4 text-red-500 rotate-180" />
                     <span className="text-sm text-red-600">{updatedMetrics.breeding.change}</span>
                     <span className="text-sm text-slate-500">from last month</span>
-                  </div>
                 </div>
+              </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Health Score</p>
                       <p className="text-3xl font-bold text-slate-900">{updatedMetrics.health.value}%</p>
-                    </div>
+                  </div>
                     <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
                       <Activity className="w-6 h-6 text-emerald-600" />
-                    </div>
-                  </div>
+                </div>
+                        </div>
                   <div className="mt-4 flex items-center space-x-2">
                     <TrendingUp className="w-4 h-4 text-green-500" />
                     <span className="text-sm text-green-600">{updatedMetrics.health.change}</span>
                     <span className="text-sm text-slate-500">from last month</span>
-                  </div>
-                </div>
-              </div>
+                        </div>
+                      </div>
+                        </div>
 
               {/* Today's Tasks */}
               <TodaysTasks cows={cows} />
@@ -425,7 +425,7 @@ function App() {
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
                 <div className="p-6 border-b border-slate-100">
                   <h3 className="text-lg font-semibold text-slate-900">Priority Alerts</h3>
-                </div>
+                        </div>
                 <div className="p-6">
                   <div className="space-y-4">
                     {alerts.map((alert) => (
@@ -438,17 +438,17 @@ function App() {
                           <div className="flex items-center justify-between">
                             <p className="font-medium text-slate-900">{alert.cow}</p>
                             <span className="text-sm text-slate-500">{alert.time}</span>
-                          </div>
+                      </div>
                           <p className="text-sm text-slate-600 mt-1">{alert.message}</p>
-                        </div>
+                    </div>
                         <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
                           View
                         </button>
-                      </div>
+                    </div>
                     ))}
-                  </div>
-                </div>
-              </div>
+                                </div>
+                                  </div>
+                                </div>
 
               {/* Quick Actions */}
               <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
@@ -523,7 +523,7 @@ function App() {
           )}
         </main>
       </div>
-
+      
       {/* Modals */}
       <AddCowModal
         isOpen={isAddCowModalOpen}
@@ -531,7 +531,7 @@ function App() {
         onSave={handleSaveCow}
         editingCow={editingCow}
       />
-
+      
       <CowProfileModal
         isOpen={isProfileModalOpen}
         onClose={handleCloseProfile}

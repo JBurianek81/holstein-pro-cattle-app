@@ -43,6 +43,8 @@ export const createCowRecord = (data = {}) => {
     category: data.category || 'Calf',
     status: data.status || 'Active', // Legacy field, kept for compatibility
     productionStatus: data.productionStatus || 'Non-Milking',
+    dam: data.dam || '', // Mother
+    sire: data.sire || '', // Father
     notes: data.notes || '',
     
     // Reproductive status fields
@@ -215,11 +217,25 @@ export const getCategoryByAge = (dateOfBirth, gender) => {
   }
 };
 
+// Helper to check and update category based on age (Calf → Heifer)
+export function updateCategoryByAge(cow) {
+  if (!cow || !cow.dateOfBirth || cow.gender !== 'Female') return cow;
+  const ageInMonths = (new Date() - new Date(cow.dateOfBirth)) / (1000 * 60 * 60 * 24 * 30.44);
+  if (cow.category === 'Calf' && ageInMonths >= 9) {
+    return { ...cow, category: 'Heifer' };
+  }
+  return cow;
+}
+
 // Record creation helpers
 export const createHealthRecord = (data = {}) => {
+  // Use consistent date method to avoid timezone issues
+  const today = new Date();
+  const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  
   return {
     id: 'HEALTH-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5).toUpperCase(),
-    date: data.date || new Date().toISOString().split('T')[0],
+    date: data.date || todayStr,
     type: data.type || 'Routine Checkup',
     description: data.description || '',
     medicine: data.medicine || '',
@@ -275,6 +291,13 @@ export const createCalvingRecord = (data = {}) => {
 
 // Create a new calf record from calving data
 export const createCalfFromCalving = (calvingData, motherCow) => {
+  // Get the sire from mother's most recent breeding record
+  let sire = '';
+  if (motherCow.breedingRecords && motherCow.breedingRecords.length > 0) {
+    const mostRecentBreeding = motherCow.breedingRecords[motherCow.breedingRecords.length - 1];
+    sire = mostRecentBreeding.bullName || mostRecentBreeding.semenId || '';
+  }
+
   return createCowRecord({
     tagNumber: calvingData.calfTag,
     name: `Calf ${calvingData.calfTag}`,
@@ -284,6 +307,8 @@ export const createCalfFromCalving = (calvingData, motherCow) => {
     status: 'Active',
     productionStatus: 'Non-Milking',
     breed: motherCow.breed || 'Holstein', // Inherit breed from mother
+    dam: motherCow.name || motherCow.tagNumber || '', // Mother becomes the dam
+    sire: sire, // Sire from most recent breeding record
     notes: `Born to ${motherCow.name} (${motherCow.tagNumber}) on ${calvingData.date}`,
     // Initialize empty record arrays
     healthRecords: [],
@@ -340,26 +365,40 @@ export const calculateReproductiveStatus = (cow) => {
     return null;
   }
 
-  const now = new Date();
-  const ninetyDaysAgo = new Date(now);
-  ninetyDaysAgo.setDate(now.getDate() - 90);
+  // PRIORITY 1: Check for recent calving records (cow is OPEN after calving)
+  const hasCalvingRecords = cow.calvingRecords && cow.calvingRecords.length > 0;
+  if (hasCalvingRecords) {
+    // Get the most recent calving record
+    const mostRecentCalving = cow.calvingRecords[cow.calvingRecords.length - 1];
+    const calvingDate = new Date(mostRecentCalving.date);
+    const now = new Date();
+    const daysSinceCalving = Math.floor((now - calvingDate) / (1000 * 60 * 60 * 24));
+    
+    // If cow has calved within the last 365 days, she is OPEN (ready for breeding)
+    if (daysSinceCalving <= 365) {
+      console.log('🐄 Cow', cow.name, 'status: OPEN (recent calving on', mostRecentCalving.date, 'days ago:', daysSinceCalving, ')');
+      return REPRODUCTIVE_STATUS.OPEN;
+    }
+  }
 
-  // Check for pregnancy confirmation in health records (within last 90 days)
-  const pregnancyCheck = cow.healthRecords?.find(record => {
-    const recordDate = new Date(record.date);
+  // PRIORITY 2: Check for ANY positive pregnancy check in health records (regardless of date)
+  const positivePregnancyCheck = cow.healthRecords?.find(record => {
     return record.type === 'Pregnancy Check' && 
            record.description && 
-           record.description.toLowerCase().includes('positive') &&
-           recordDate >= ninetyDaysAgo;
+           record.description.toLowerCase().includes('positive');
   });
 
-  // If pregnancy confirmed, return PREGNANT
-  if (pregnancyCheck) {
+  // If pregnancy confirmed (any positive check), return PREGNANT
+  if (positivePregnancyCheck) {
     console.log('🐄 Cow', cow.name, 'status: PREGNANT (pregnancy confirmed)');
     return REPRODUCTIVE_STATUS.PREGNANT;
   }
 
-  // Check for negative pregnancy check in health records (within last 90 days)
+  // PRIORITY 3: Check for negative pregnancy check in health records (within last 90 days)
+  const now = new Date();
+  const ninetyDaysAgo = new Date(now);
+  ninetyDaysAgo.setDate(now.getDate() - 90);
+  
   const negativePregnancyCheck = cow.healthRecords?.find(record => {
     const recordDate = new Date(record.date);
     return record.type === 'Pregnancy Check' && 
@@ -374,7 +413,7 @@ export const calculateReproductiveStatus = (cow) => {
     return REPRODUCTIVE_STATUS.OPEN;
   }
 
-  // Check for any breeding records (cow is BRED if she has been bred and not confirmed pregnant)
+  // PRIORITY 4: Check for any breeding records (cow is BRED if she has been bred and not confirmed pregnant)
   const hasBreedingRecords = cow.breedingRecords && cow.breedingRecords.length > 0;
   
   if (hasBreedingRecords) {

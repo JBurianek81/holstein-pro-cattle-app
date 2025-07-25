@@ -20,6 +20,8 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
     category: '',
     status: 'Active', // Legacy field, kept for compatibility
     productionStatus: 'Non-Milking',
+    dam: '',
+    sire: '',
     notes: ''
   });
   
@@ -38,6 +40,8 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         category: editingCow.category || '',
         status: editingCow.status || 'Active',
         productionStatus: editingCow.productionStatus || 'Non-Milking',
+        dam: editingCow.dam || '',
+        sire: editingCow.sire || '',
         notes: editingCow.notes || ''
       });
     } else {
@@ -50,6 +54,8 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
         category: '',
         status: 'Active',
         productionStatus: 'Non-Milking',
+        dam: '',
+        sire: '',
         notes: ''
       });
     }
@@ -113,7 +119,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200">
           <div className="flex items-center space-x-3">
@@ -292,6 +298,38 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
                   <option key={status} value={status}>{status}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Dam and Sire (full width, two columns, own row) */}
+          <div className="grid grid-cols-2 gap-6">
+            {/* Dam */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-2">
+                <Users className="w-4 h-4" />
+                <span>Dam</span>
+              </label>
+              <input
+                type="text"
+                value={formData.dam}
+                onChange={(e) => handleChange('dam', e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="Mother's name or tag number"
+              />
+            </div>
+            {/* Sire */}
+            <div>
+              <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-2">
+                <Users className="w-4 h-4" />
+                <span>Sire</span>
+              </label>
+              <input
+                type="text"
+                value={formData.sire}
+                onChange={(e) => handleChange('sire', e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="Father's name or bull name"
+              />
             </div>
           </div>
 

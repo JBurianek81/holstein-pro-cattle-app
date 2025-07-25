@@ -13,8 +13,10 @@ import {
   Edit3,
   Trash2,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Users
 } from 'lucide-react';
+import AddCowModal from './AddCowModal';
 import { 
   calculateAge,
   createHealthRecord,
@@ -28,11 +30,20 @@ import {
   getProductionStatusBadge,
   HEALTH_RECORD_TYPES,
   BREEDING_METHODS,
-  BREEDING_RESULTS,
   CALF_HEALTH_STATUS,
-  COMPLICATIONS
+  COMPLICATIONS,
+  updateCategoryByAge // <-- import the new helper
 } from '../utils/cowDataModel';
 
+
+// Helper function for consistent date formatting
+const formatDueDate = (dateString) => {
+  if (!dateString) return null;
+  // Parse date string to avoid timezone issues
+  const [year, month, day] = dateString.split('-').map(Number);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return monthNames[month - 1] + ' ' + day;
+};
 
 // Tab components
 const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
@@ -121,6 +132,18 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
                 <Activity className="w-4 h-4 text-slate-400" />
                 <span className="text-slate-600">Status: <strong>{cow.status}</strong></span>
               </div>
+              {cow.dam && (
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-slate-400" />
+                  <span className="text-slate-600">Dam: <strong>{cow.dam}</strong></span>
+                </div>
+              )}
+              {cow.sire && (
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-slate-400" />
+                  <span className="text-slate-600">Sire: <strong>{cow.sire}</strong></span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -141,7 +164,7 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="text-2xl font-bold text-slate-900">
             {calculateReproductiveStatus(cow) === 'PREGNANT' && lastBreeding?.expectedDueDate 
-              ? new Date(lastBreeding.expectedDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              ? formatDueDate(lastBreeding.expectedDueDate)
               : 'Not Applicable'
             }
           </div>
@@ -390,7 +413,6 @@ const BreedingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecor
                   <th className="text-left py-3 px-4 font-semibold text-slate-900">Date</th>
                   <th className="text-left py-3 px-4 font-semibold text-slate-900">Bull Name/Semen ID</th>
                   <th className="text-left py-3 px-4 font-semibold text-slate-900">Method</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Result</th>
                   <th className="text-left py-3 px-4 font-semibold text-slate-900">Expected Due</th>
                   <th className="text-left py-3 px-4 font-semibold text-slate-900">Technician</th>
                   <th className="text-right py-3 px-4 font-semibold text-slate-900">Actions</th>
@@ -406,16 +428,9 @@ const BreedingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecor
                         {record.method}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        record.result === 'Success' ? 'bg-green-100 text-green-700' :
-                        record.result === 'Failed' ? 'bg-red-100 text-red-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {record.result}
-                      </span>
+                    <td className="py-3 px-4 text-sm text-slate-600">
+                      {record.expectedDueDate ? formatDueDate(record.expectedDueDate) : 'TBD'}
                     </td>
-                    <td className="py-3 px-4 text-sm text-slate-600">{record.expectedDueDate || 'TBD'}</td>
                     <td className="py-3 px-4 text-sm text-slate-600">{record.technician || 'Not specified'}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-end space-x-2">
@@ -550,7 +565,18 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
   const [toastMessage, setToastMessage] = useState('');
   const [showBullModal, setShowBullModal] = useState(false);
   const [editingBull, setEditingBull] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
+  // Automatic Calf → Heifer transition on load/display
+  useEffect(() => {
+    if (isOpen && cow) {
+      const updatedCow = updateCategoryByAge(cow);
+      if (updatedCow.category !== cow.category) {
+        onUpdateCow(updatedCow);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, cow]);
 
   if (!isOpen || !cow) return null;
 
@@ -632,6 +658,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
             record.id === editingRecord.id ? { ...editingRecord, ...recordData, updatedAt: new Date().toISOString() } : record
           );
           console.log('Updated breeding record for cow:', normalizedCow.name);
+          
+          // Handle bull inventory updates for edited breeding records
+          if (onBreedingRecordSaved && recordData.semenId) {
+            // Find the updated record to pass to the callback
+            const updatedRecord = updatedCow.breedingRecords.find(record => record.id === editingRecord.id);
+            if (updatedRecord) {
+              onBreedingRecordSaved(updatedCow, updatedRecord, recordData.semenId);
+            }
+          }
           break;
         case 'calving':
           updatedCow.calvingRecords = normalizedCow.calvingRecords.map(record => 
@@ -690,6 +725,45 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           newRecord = createCalvingRecord(recordData);
           updatedCow.calvingRecords = [...normalizedCow.calvingRecords, newRecord];
           console.log('Added calving record to cow:', normalizedCow.name);
+          
+          // Automatic Heifer → Cow transition
+          if (normalizedCow.category === 'Heifer') {
+            updatedCow.category = 'Cow';
+            console.log('Automatic category update: Heifer → Cow for', normalizedCow.name);
+          }
+          
+          // Automatic calf addition to herd (if calf is alive)
+          if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && 
+              recordData.calfHealth !== 'Deceased' && onAddCow) {
+            try {
+              // Check if calf tag already exists in herd
+              const existingCalf = cows?.find(c => c.tagNumber === recordData.calfTag.trim());
+              if (existingCalf) {
+                console.warn('Calf with tag number', recordData.calfTag, 'already exists in herd');
+                alert(`Warning: A calf with tag number ${recordData.calfTag} already exists in the herd.`);
+              } else {
+                // Create new calf record
+                const newCalf = createCalfFromCalving(recordData, normalizedCow);
+                console.log('Auto-creating new calf:', newCalf.name, 'Tag:', newCalf.tagNumber);
+                
+                // Add calf to herd
+                onAddCow(newCalf);
+                
+                // Show success message
+                setToastMessage(`Calf ${recordData.calfTag} successfully added to herd!`);
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+              }
+            } catch (error) {
+              console.error('Error creating calf:', error);
+              alert('Error creating calf record. Please try again.');
+            }
+          }
+          
+          // Note: Reproductive status will be automatically calculated based on calving records
+          // The calculateReproductiveStatus function now prioritizes recent calving records
+          // and will return OPEN status for cows that have recently calved
+          console.log('Calving record saved for:', normalizedCow.name, '- reproductive status will be recalculated automatically');
           break;
         default:
           console.error('Unknown record type:', recordType);
@@ -716,10 +790,13 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
 
   // Handle pregnancy confirmation
   const handleConfirmPregnancy = () => {
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    
     const pregnancyRecord = createHealthRecord({
       type: 'Pregnancy Check',
       description: 'Pregnancy confirmed positive',
-      date: new Date().toISOString().split('T')[0]
+      date: todayStr
     });
 
     let updatedCow = { ...normalizedCow };
@@ -804,6 +881,14 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
               </div>
             </div>
             <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="flex items-center space-x-2 px-3 py-2 bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors rounded-lg text-sm font-medium"
+                title="Edit animal information"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Edit</span>
+              </button>
               {normalizedCow.gender === 'Female' && normalizedCow.category !== 'Calf' && (
                 <>
                   <button
@@ -899,6 +984,17 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           />
         </>
       )}
+
+      {/* Edit Animal Modal */}
+      <AddCowModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSave={(updatedCow) => {
+          onUpdateCow(updatedCow);
+          setShowEditModal(false);
+        }}
+        editingCow={normalizedCow}
+      />
     </>
   );
 };
@@ -941,16 +1037,30 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
         date: editingRecord.date || '',
         expectedDueDate: editingRecord.expectedDueDate || ''
       });
+      
+      // For breeding records, also set the selected bull
+      if (recordType === 'breeding' && editingRecord.bullName) {
+        const existingBull = bullInventory.find(b => b.name === editingRecord.bullName || b.naabCode === editingRecord.semenId);
+        if (existingBull) {
+          setSelectedBull(existingBull);
+          // Also set the bullSelection field value for the dropdown
+          setFormData(prev => ({
+            ...prev,
+            bullSelection: existingBull.naabCode
+          }));
+        }
+      }
     } else if (recordType === 'breeding') {
       // Set default breeding date to today if opening new breeding modal
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       setFormData(prev => ({
         ...prev,
-        date: today,
-        expectedDueDate: calculateDueDate(today)
+        date: todayStr,
+        expectedDueDate: calculateDueDate(todayStr)
       }));
     }
-  }, [isOpen, recordType, editingRecord]);
+  }, [isOpen, recordType, editingRecord, bullInventory]);
 
   // Handle field value changes with auto-calculation
   const handleFieldChange = (fieldName, value) => {
@@ -988,12 +1098,7 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
         alert('Please select a bull from the dropdown');
         return;
       }
-      if (!onBreedingRecordSaved) {
-        alert('Breeding record save function not available');
-        return;
-      }
-      // For breeding records, we need to handle bull inventory updates
-      // Map form data to match createBreedingRecord expectations
+      // For breeding records, map form data to match createBreedingRecord expectations
       const breedingData = {
         ...formData,
         bullName: selectedBull.name, // Use selected bull's name
@@ -1002,25 +1107,11 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
       };
       console.log('🐄 Form data:', formData);
       console.log('🐄 Selected bull:', selectedBull);
-      console.log('🐄 Creating breeding record with data:', breedingData);
-      const breedingRecord = createBreedingRecord(breedingData);
-      console.log('🐄 Created breeding record:', breedingRecord);
+      console.log('🐄 Breeding record data:', breedingData);
       
-      // Update the local cow state immediately so the record appears in the UI
-      const updatedCow = {
-        ...selectedCow,
-        breedingRecords: [...(selectedCow.breedingRecords || []), breedingRecord]
-      };
-      onUpdateCow(updatedCow);
-      
-      // Also call the global update function for bull inventory
-      onBreedingRecordSaved(selectedCow, breedingRecord, selectedBull.naabCode);
-      console.log('🐄 Called onBreedingRecordSaved');
-      
-      console.log(`🐄 Breeding record saved successfully for ${selectedCow.name} with ${selectedBull.name}`);
-      console.log('🐄 About to call onClose()');
+      // Use the parent's onSave function which handles both creating and editing
+      onSave(recordType, breedingData);
       onClose(); // Close the modal after saving
-      console.log('🐄 Called onClose()');
     } else {
       // For other record types, use the normal save flow
       onSave(recordType, formData);

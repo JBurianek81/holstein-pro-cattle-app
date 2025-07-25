@@ -378,12 +378,15 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     console.log('🐄 Confirming pregnancy check:', pregnancyCheckAction, 'for cow:', pregnancyCheckCow.name);
 
     // Create a pregnancy check health record
+    const today = new Date();
+    const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    
     const pregnancyRecord = createHealthRecord({
       type: 'Pregnancy Check',
       description: pregnancyCheckAction === 'pregnant' 
         ? 'Pregnancy confirmed positive' 
         : 'Pregnancy check negative',
-      date: new Date().toISOString().split('T')[0]
+      date: todayStr
     });
 
     console.log('🐄 Created pregnancy record:', pregnancyRecord);
@@ -627,11 +630,12 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-green-600">
                                   {cow.breedingRecords && cow.breedingRecords.length > 0 && cow.breedingRecords[cow.breedingRecords.length - 1].expectedDueDate
-                                    ? new Date(cow.breedingRecords[cow.breedingRecords.length - 1].expectedDueDate).toLocaleDateString('en-US', { 
-                                        month: 'short', 
-                                        day: 'numeric',
-                                        year: 'numeric'
-                                      })
+                                    ? (() => {
+                                        const dateString = cow.breedingRecords[cow.breedingRecords.length - 1].expectedDueDate;
+                                        const [year, month, day] = dateString.split('-').map(Number);
+                                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                        return monthNames[month - 1] + ' ' + day + ', ' + year;
+                                      })()
                                     : 'Unknown'
                                   }
                                 </div>
