@@ -28,6 +28,7 @@ import {
   CheckCircle,
   X
 } from 'lucide-react';
+import { generateFarmCode } from '../utils/farmCodeUtils';
 
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -46,8 +47,62 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
     operationType: 'Dairy',
     herdSize: '100-500',
     yearsInOperation: '15',
-    farmLogo: null
+    farmLogo: null,
+    farmCode: null,
+    farmCodeCreated: null,
+    farmCodeLastRegenerated: null
   });
+
+  // Farm Code State
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [showCopySuccess, setShowCopySuccess] = useState(false);
+
+
+
+  // Generate initial farm code if none exists
+  const initializeFarmCode = () => {
+    if (!profileData.farmCode) {
+      const newCode = generateFarmCode();
+      const now = new Date().toISOString();
+      setProfileData(prev => ({
+        ...prev,
+        farmCode: newCode,
+        farmCodeCreated: now,
+        farmCodeLastRegenerated: now
+      }));
+    }
+  };
+
+  // Regenerate farm code
+  const regenerateFarmCode = () => {
+    const newCode = generateFarmCode();
+    const now = new Date().toISOString();
+    setProfileData(prev => ({
+      ...prev,
+      farmCode: newCode,
+      farmCodeLastRegenerated: now
+    }));
+    setShowRegenerateConfirm(false);
+  };
+
+  // Copy farm code to clipboard
+  const copyFarmCode = async () => {
+    try {
+      await navigator.clipboard.writeText(profileData.farmCode);
+      setShowCopySuccess(true);
+      setTimeout(() => setShowCopySuccess(false), 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = profileData.farmCode;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setShowCopySuccess(true);
+      setTimeout(() => setShowCopySuccess(false), 2000);
+    }
+  };
 
   // Farm Settings State
   const [farmSettings, setFarmSettings] = useState({
@@ -109,6 +164,11 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       setNotifications(settings.notifications || notifications);
       setAppPreferences(settings.app || appPreferences);
     }
+    
+    // Initialize farm code if none exists
+    setTimeout(() => {
+      initializeFarmCode();
+    }, 100);
   }, []);
 
   // Update local profileData when prop changes
@@ -434,6 +494,76 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                     onChange={(e) => setProfileData(prev => ({ ...prev, yearsInOperation: e.target.value }))}
                     className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+              </div>
+
+              {/* Farm Access Code Section */}
+              <div className="border-t border-slate-200 pt-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">Farm Access Code</h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Share this code with farm members to give them access to your farm data. Keep this code secure - anyone with this code can access your farm data.
+                  </p>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Your Farm Code
+                      </label>
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-white px-4 py-3 rounded-lg border border-slate-300 font-mono text-lg font-bold text-slate-900 min-w-[200px]">
+                          {profileData.farmCode || 'Generating...'}
+                        </div>
+                        <button
+                          onClick={copyFarmCode}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          <span>Copy</span>
+                        </button>
+                        <button
+                          onClick={() => setShowRegenerateConfirm(true)}
+                          className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+                        >
+                          <Key className="w-4 h-4" />
+                          <span>Regenerate</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Copy Success Message */}
+                  {showCopySuccess && (
+                    <div className="flex items-center space-x-2 text-green-600 text-sm mb-4">
+                      <CheckCircle className="w-4 h-4" />
+                      <span>Farm code copied to clipboard!</span>
+                    </div>
+                  )}
+
+                  {/* Code Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                    <div>
+                      <span className="font-medium">Created:</span>{' '}
+                      {profileData.farmCodeCreated ? new Date(profileData.farmCodeCreated).toLocaleDateString() : 'N/A'}
+                    </div>
+                    <div>
+                      <span className="font-medium">Last Updated:</span>{' '}
+                      {profileData.farmCodeLastRegenerated ? new Date(profileData.farmCodeLastRegenerated).toLocaleDateString() : 'N/A'}
+                    </div>
+                  </div>
+
+                  {/* Security Note */}
+                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-yellow-800">
+                        <p className="font-medium">Security Note:</p>
+                        <p>Keep this code secure. Anyone with this code can access your farm data. Only share with trusted farm members.</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -979,6 +1109,35 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                 className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Clear All Data
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regenerate Farm Code Confirmation Modal */}
+      {showRegenerateConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <Key className="w-6 h-6 text-orange-600" />
+              <h3 className="text-lg font-semibold text-slate-900">Regenerate Farm Code</h3>
+            </div>
+            <p className="text-slate-600 mb-6">
+              This will generate a new farm access code. The old code will no longer work. Make sure to share the new code with your farm members.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowRegenerateConfirm(false)}
+                className="flex-1 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={regenerateFarmCode}
+                className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                Regenerate Code
               </button>
             </div>
           </div>
