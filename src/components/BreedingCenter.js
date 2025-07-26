@@ -1028,7 +1028,17 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                             <div className="text-sm text-slate-500">{bull.naabCode}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-900">{bull.straws}</div>
+                            <div className={`text-sm font-medium ${
+                              bull.straws === 0 
+                                ? 'text-red-600' 
+                                : bull.straws <= 5 
+                                  ? 'text-orange-600' 
+                                  : 'text-slate-900'
+                            }`}>
+                              {bull.straws}
+                              {bull.straws === 0 && ' (Out of Stock)'}
+                              {bull.straws > 0 && bull.straws <= 5 && ' (Low Stock)'}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-slate-900">${bull.cost}/Straw</div>

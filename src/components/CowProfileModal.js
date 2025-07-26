@@ -28,6 +28,8 @@ import {
   calculateReproductiveStatus,
   getReproductiveStatusBadge,
   getProductionStatusBadge,
+  calculateHealthScore,
+  getHealthScoreBadge,
   HEALTH_RECORD_TYPES,
   BREEDING_METHODS,
   CALF_HEALTH_STATUS,
@@ -150,7 +152,7 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
       </div>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-5 gap-6">
         <div className="bg-white rounded-xl p-4 border border-slate-200">
           <div className="text-2xl font-bold text-slate-900">{age}</div>
           <div className="text-sm text-slate-600">Current Age</div>
@@ -179,6 +181,12 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
             {calculateReproductiveStatus(cow)}
           </div>
           <div className="text-sm text-slate-600">Last Breeding Status</div>
+        </div>
+        <div className="bg-white rounded-xl p-4 border border-slate-200">
+          <div className={`text-2xl font-bold ${getHealthScoreBadge(calculateHealthScore(cow)).className.replace('px-3 py-1 text-sm font-bold rounded-full', '')}`}>
+            {calculateHealthScore(cow)}%
+          </div>
+          <div className="text-sm text-slate-600">Health Score</div>
         </div>
       </div>
 
@@ -555,7 +563,7 @@ const CalvingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecord
   );
 });
 
-const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onAddCow, cows = [], onUpdateBullInventory }) => {
+const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onBreedingRecordDeleted, onAddCow, cows = [], onUpdateBullInventory }) => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -625,8 +633,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           console.log('Deleted health record from cow:', normalizedCow.name);
           break;
         case 'breeding':
+          // Find the breeding record before deleting it
+          const deletedBreedingRecord = normalizedCow.breedingRecords.find(record => record.id === recordId);
           updatedCow.breedingRecords = normalizedCow.breedingRecords.filter(record => record.id !== recordId);
           console.log('Deleted breeding record from cow:', normalizedCow.name);
+          
+          // Call the deletion callback with the deleted record
+          if (onBreedingRecordDeleted && deletedBreedingRecord) {
+            onBreedingRecordDeleted(updatedCow, deletedBreedingRecord);
+          }
           break;
         case 'calving':
           updatedCow.calvingRecords = normalizedCow.calvingRecords.filter(record => record.id !== recordId);
@@ -664,7 +679,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
             // Find the updated record to pass to the callback
             const updatedRecord = updatedCow.breedingRecords.find(record => record.id === editingRecord.id);
             if (updatedRecord) {
-              onBreedingRecordSaved(updatedCow, updatedRecord, recordData.semenId);
+              // Check if the bull changed during editing
+              const bullChanged = editingRecord.semenId !== recordData.semenId;
+              if (bullChanged) {
+                // Pass the old breeding record for proper straw restoration
+                onBreedingRecordSaved(updatedCow, updatedRecord, recordData.semenId, true, editingRecord);
+              } else {
+                // Same bull, just update the record
+                onBreedingRecordSaved(updatedCow, updatedRecord, recordData.semenId, false, null);
+              }
             }
           }
           break;
@@ -691,6 +714,11 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           newRecord = createBreedingRecord(recordData);
           updatedCow.breedingRecords = [...normalizedCow.breedingRecords, newRecord];
           console.log('Added breeding record to cow:', normalizedCow.name);
+          
+          // Handle bull inventory updates for new breeding records
+          if (onBreedingRecordSaved && recordData.semenId) {
+            onBreedingRecordSaved(updatedCow, newRecord, recordData.semenId, false, null);
+          }
           
           // Auto-create calf if tag number is provided and not editing existing record
           if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && onAddCow) {
@@ -966,6 +994,7 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
         }}
         onSave={handleSaveRecord}
         onBreedingRecordSaved={onBreedingRecordSaved}
+        onBreedingRecordDeleted={onBreedingRecordDeleted}
         onUpdateCow={onUpdateCow}
         selectedCow={normalizedCow}
         onAddBull={handleAddBull}
@@ -1000,7 +1029,7 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
 };
 
 // Add Record Modal Component
-const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [], onClose, onSave, onBreedingRecordSaved, onUpdateCow = () => {}, selectedCow, onAddBull }) => {
+const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [], onClose, onSave, onBreedingRecordSaved, onBreedingRecordDeleted, onUpdateCow = () => {}, selectedCow, onAddBull }) => {
   const [formData, setFormData] = useState({});
   const [selectedBull, setSelectedBull] = useState(null);
 
@@ -1098,9 +1127,17 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
         alert('Please select a bull from the dropdown');
         return;
       }
+      
+      // Check if selected bull has available straws
+      if (selectedBull.straws <= 0) {
+        alert(`Cannot create breeding record: ${selectedBull.name} has no straws available. Please select a different bull or add more straws to inventory.`);
+        return;
+      }
+      
       // For breeding records, map form data to match createBreedingRecord expectations
       const breedingData = {
         ...formData,
+        cowId: selectedCow.id, // Add cowId to link breeding record to specific cow
         bullName: selectedBull.name, // Use selected bull's name
         semenId: selectedBull.naabCode, // Use selected bull's NAAB code
         cost: selectedBull.cost // Use selected bull's cost
@@ -1146,6 +1183,17 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
           value: bull.naabCode,
           label: `${bull.name} (${bull.straws} straws available - $${bull.cost}/straw)`
         }));
+
+        // If no bulls have straws available, show a warning
+        if (availableBulls.length === 0) {
+          return {
+            title: isEditing ? 'Edit Breeding Record' : 'Add Breeding Record',
+            color: 'pink',
+            fields: [
+              { name: 'noBullsWarning', label: 'No Bulls Available', type: 'warning', message: 'No bulls have straws available. Please add straws to bull inventory before creating breeding records.', width: 'full' }
+            ]
+          };
+        }
 
         return {
           title: isEditing ? 'Edit Breeding Record' : 'Add Breeding Record',
@@ -1273,6 +1321,10 @@ const AddRecordModal = ({ isOpen, recordType, editingRecord, bullInventory = [],
                     />
                     <span className="text-sm text-slate-700">Yes</span>
                   </label>
+                ) : field.type === 'warning' ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-yellow-800 text-sm">
+                    <p>{field.message}</p>
+                  </div>
                 ) : (
                   <input
                     type={field.type}

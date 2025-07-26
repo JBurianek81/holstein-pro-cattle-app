@@ -1,6 +1,6 @@
 import React from 'react';
-import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive } from 'lucide-react';
-import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge } from '../utils/cowDataModel';
+import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive, Activity } from 'lucide-react';
+import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge, calculateHealthScore, getHealthScoreBadge } from '../utils/cowDataModel';
 
 const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile, onArchiveCow }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
@@ -344,6 +344,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Cow Details</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Breed & Category</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Status</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-900">Health Score</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Age</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Location</th>
                   <th className="text-left py-4 px-6 font-semibold text-slate-900">Notes</th>
@@ -406,6 +407,14 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
                             </span>
                           ) : null;
                         })()}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center space-x-2">
+                        <Activity className="w-4 h-4 text-slate-400" />
+                        <span className={`font-medium ${getHealthScoreBadge(calculateHealthScore(cow)).className.replace('px-3 py-1 text-sm font-bold rounded-full', '')}`}>
+                          {calculateHealthScore(cow)}%
+                        </span>
                       </div>
                     </td>
                     <td className="py-4 px-6">

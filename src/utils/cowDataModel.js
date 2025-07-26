@@ -257,6 +257,7 @@ export const createHealthRecord = (data = {}) => {
 export const createBreedingRecord = (data = {}) => {
   return {
     id: 'BREEDING-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5).toUpperCase(),
+    cowId: data.cowId || '', // Add cowId to link breeding record to specific cow
     date: data.date || new Date().toISOString().split('T')[0],
     bullName: data.bullName || '',
     semenId: data.semenId || '',
@@ -326,7 +327,10 @@ export const createCalfFromCalving = (calvingData, motherCow) => {
 // Dropdown options for records
 export const HEALTH_RECORD_TYPES = [
   'Vaccination',
-  'Treatment',
+  'Mastitis',
+  'D.A.',
+  'Cystic',
+  'Surgery',
   'Injury',
   'Illness',
   'Routine Checkup',
@@ -467,4 +471,113 @@ export const createHeatRecord = () => {
     description: 'Heat detected - cow ready for breeding',
     date: new Date().toISOString().split('T')[0]
   });
+};
+
+// Health Scoring System
+export const HEALTH_SCORE_DEDUCTIONS = {
+  // Small Points (2-3 points)
+  'Illness': -2,
+  'Hoof Trimming': -2,
+  'Deworming': -2,
+  
+  // Medium Points (5-6 points)
+  'Cystic': -5,
+  'Mastitis': -6,
+  
+  // High Points (10-15 points)
+  'D.A.': -12,
+  'Surgery': -15,
+  'Injury': -10,
+  
+  // Other types (no deduction)
+  'Vaccination': 0,
+  'Routine Checkup': 0,
+  'Pregnancy Check': 0,
+  'Heat Detection': 0,
+  'Other': 0
+};
+
+// Calculate time-based recovery multiplier
+export const calculateTimeDecayMultiplier = (daysSinceIssue) => {
+  if (daysSinceIssue <= 30) {
+    return 1.0; // 100% deduction for recent issues (last 30 days)
+  } else if (daysSinceIssue <= 45) {
+    return 0.75; // 75% deduction for 30-45 days old
+  } else if (daysSinceIssue <= 60) {
+    return 0.5; // 50% deduction for 46-60 days old
+  } else if (daysSinceIssue <= 90) {
+    return 0.25; // 25% deduction for 61-90 days old
+  } else {
+    return 0.0; // No deduction for 91+ days old
+  }
+};
+
+// Calculate individual animal health score
+export const calculateHealthScore = (cow) => {
+  if (!cow.healthRecords || cow.healthRecords.length === 0) {
+    return 100; // Perfect health if no health records
+  }
+
+  let totalDeduction = 0;
+  const today = new Date();
+
+  cow.healthRecords.forEach(record => {
+    const deduction = HEALTH_SCORE_DEDUCTIONS[record.type];
+    
+    if (deduction && deduction < 0) {
+      const recordDate = new Date(record.date);
+      const daysSinceIssue = Math.floor((today - recordDate) / (1000 * 60 * 60 * 24));
+      const timeDecayMultiplier = calculateTimeDecayMultiplier(daysSinceIssue);
+      
+      const adjustedDeduction = Math.abs(deduction) * timeDecayMultiplier;
+      totalDeduction += adjustedDeduction;
+      
+      console.log(`🏥 Health Score: ${cow.name} - ${record.type} (${daysSinceIssue} days ago): -${Math.abs(deduction)} × ${timeDecayMultiplier} = -${adjustedDeduction.toFixed(1)}`);
+    }
+  });
+
+  const healthScore = Math.max(0, 100 - totalDeduction);
+  console.log(`🏥 ${cow.name} Final Health Score: ${healthScore.toFixed(1)}% (deduction: ${totalDeduction.toFixed(1)})`);
+  
+  return Math.round(healthScore * 10) / 10; // Round to 1 decimal place
+};
+
+// Calculate herd average health score
+export const calculateHerdHealthScore = (cows) => {
+  if (!cows || cows.length === 0) {
+    return 100;
+  }
+
+  const totalScore = cows.reduce((sum, cow) => {
+    return sum + calculateHealthScore(cow);
+  }, 0);
+
+  const averageScore = totalScore / cows.length;
+  console.log(`🏥 Herd Average Health Score: ${averageScore.toFixed(1)}%`);
+  
+  return Math.round(averageScore * 10) / 10; // Round to 1 decimal place
+};
+
+// Get health score color based on score value
+export const getHealthScoreColor = (score) => {
+  if (score >= 95) {
+    return 'text-green-600 bg-green-100'; // Excellent health
+  } else if (score >= 85) {
+    return 'text-blue-600 bg-blue-100'; // Good health
+  } else if (score >= 70) {
+    return 'text-yellow-600 bg-yellow-100'; // Fair health
+  } else if (score >= 50) {
+    return 'text-orange-600 bg-orange-100'; // Poor health
+  } else {
+    return 'text-red-600 bg-red-100'; // Critical health
+  }
+};
+
+// Get health score badge styling
+export const getHealthScoreBadge = (score) => {
+  const colorClasses = getHealthScoreColor(score);
+  return {
+    text: `${score}%`,
+    className: `px-3 py-1 text-sm font-bold rounded-full ${colorClasses}`
+  };
 }; 

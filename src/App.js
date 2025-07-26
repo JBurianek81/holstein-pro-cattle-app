@@ -26,7 +26,7 @@ import AnalyticsView from './components/AnalyticsView';
 import TodaysTasks from './components/TodaysTasks';
 import SettingsView from './components/SettingsView';
 import ArchivedAnimals from './components/ArchivedAnimals';
-import { calculateReproductiveStatus } from './utils/cowDataModel';
+import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBadge } from './utils/cowDataModel';
 
 function App() {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -42,7 +42,10 @@ function App() {
   // Bull inventory state
   const [bullInventory, setBullInventory] = useState([
     { name: "Champion's Pride", naabCode: "BULL-001", straws: 150, cost: 100, tank: "Tank A", canister: "C-001", purchaseDate: "2024-01-10", supplier: "Genetics Inc." },
-    { name: "Golden Genes", naabCode: "BULL-002", straws: 75, cost: 120, tank: "Tank B", canister: "B-002", purchaseDate: "2024-02-15", supplier: "AgriSires" }
+    { name: "Golden Genes", naabCode: "BULL-002", straws: 75, cost: 120, tank: "Tank B", canister: "B-002", purchaseDate: "2024-02-15", supplier: "AgriSires" },
+    { name: "Thunder Bolt", naabCode: "BULL-003", straws: 3, cost: 150, tank: "Tank A", canister: "C-003", purchaseDate: "2024-03-01", supplier: "Elite Genetics" },
+    { name: "Silver Star", naabCode: "BULL-004", straws: 0, cost: 200, tank: "Tank B", canister: "B-004", purchaseDate: "2024-01-20", supplier: "Premium Sires" },
+    { name: "Blue Horizon", naabCode: "BULL-005", straws: 1, cost: 180, tank: "Tank C", canister: "C-005", purchaseDate: "2024-02-10", supplier: "Genetics Inc." }
   ]);
 
   // Load cows from localStorage on app start
@@ -56,6 +59,230 @@ function App() {
       } catch (error) {
         console.error('❌ Error loading cows from localStorage:', error);
       }
+    } else {
+      // Create sample cows with health records to demonstrate health scoring
+      const sampleCows = [
+        {
+          id: 'cow-1',
+          name: 'Bella',
+          tagNumber: '001',
+          breed: 'Holstein',
+          category: 'Cow',
+          gender: 'Female',
+          dateOfBirth: '2020-03-15',
+          status: 'Active',
+          productionStatus: 'Milking',
+          location: 'Barn A',
+          notes: 'High producer',
+          healthRecords: [
+            {
+              id: 'health-1',
+              type: 'Mastitis',
+              date: '2024-01-15',
+              description: 'Left front quarter - treated with antibiotics',
+              duration: '7'
+            },
+            {
+              id: 'health-2',
+              type: 'Pregnancy Check',
+              date: '2024-02-20',
+              description: 'Negative - not pregnant',
+              duration: '0'
+            }
+          ],
+          breedingRecords: [
+            {
+              id: 'breeding-1',
+              cowId: 'cow-1', // Add cowId to link to Bella
+              date: '2024-01-10',
+              semenId: 'CHAMP001',
+              bullName: "Champion's Pride",
+              method: 'AI',
+              notes: 'First breeding attempt'
+            },
+            {
+              id: 'breeding-2',
+              cowId: 'cow-1', // Add cowId to link to Bella
+              date: '2024-02-15',
+              semenId: 'CHAMP001',
+              bullName: "Champion's Pride",
+              method: 'AI',
+              notes: 'Second breeding attempt'
+            }
+          ]
+        },
+        {
+          id: 'cow-2',
+          name: 'Daisy',
+          tagNumber: '002',
+          breed: 'Jersey',
+          category: 'Cow',
+          gender: 'Female',
+          dateOfBirth: '2019-08-22',
+          status: 'Active',
+          productionStatus: 'Milking',
+          location: 'Barn B',
+          notes: 'High butterfat content',
+          healthRecords: [
+            {
+              id: 'health-3',
+              type: 'D.A.',
+              date: '2024-01-20',
+              description: 'Left displaced abomasum - surgical correction',
+              duration: '14'
+            },
+            {
+              id: 'health-4',
+              type: 'Surgery',
+              date: '2024-01-20',
+              description: 'Abomasopexy procedure',
+              duration: '30'
+            },
+            {
+              id: 'health-5',
+              type: 'Pregnancy Check',
+              date: '2024-03-15',
+              description: 'Negative - not pregnant after multiple attempts',
+              duration: '0'
+            }
+          ],
+          breedingRecords: [
+            {
+              id: 'breeding-3',
+              cowId: 'cow-2', // Add cowId to link to Daisy
+              date: '2024-01-25',
+              semenId: 'GOLD001',
+              bullName: 'Golden Genes',
+              method: 'AI',
+              notes: 'First breeding attempt'
+            },
+            {
+              id: 'breeding-4',
+              cowId: 'cow-2', // Add cowId to link to Daisy
+              date: '2024-02-20',
+              semenId: 'GOLD001',
+              bullName: 'Golden Genes',
+              method: 'AI',
+              notes: 'Second breeding attempt'
+            },
+            {
+              id: 'breeding-5',
+              cowId: 'cow-2', // Add cowId to link to Daisy
+              date: '2024-03-10',
+              semenId: 'CHAMP001',
+              bullName: "Champion's Pride",
+              method: 'AI',
+              notes: 'Third breeding attempt - different bull'
+            }
+          ]
+        },
+        {
+          id: 'cow-3',
+          name: 'Rosie',
+          tagNumber: '003',
+          breed: 'Holstein',
+          category: 'Heifer',
+          gender: 'Female',
+          dateOfBirth: '2022-05-10',
+          status: 'Active',
+          productionStatus: 'Non-Milking',
+          location: 'Pasture 1',
+          notes: 'First-time heifer',
+          healthRecords: [
+            {
+              id: 'health-5',
+              type: 'Cystic',
+              date: '2024-01-25',
+              description: 'Multiple ovarian cysts detected',
+              duration: '30'
+            },
+            {
+              id: 'health-6',
+              type: 'Hoof Trimming',
+              date: '2024-02-10',
+              description: 'Routine hoof trimming',
+              duration: '180'
+            },
+            {
+              id: 'health-7',
+              type: 'Pregnancy Check',
+              date: '2024-03-20',
+              description: 'Positive - confirmed pregnant',
+              duration: '0'
+            }
+          ],
+          breedingRecords: [
+            {
+              id: 'breeding-6',
+              cowId: 'cow-3', // Add cowId to link to Rosie
+              date: '2024-02-15',
+              semenId: 'CHAMP001',
+              bullName: "Champion's Pride",
+              method: 'AI',
+              notes: 'First breeding attempt - successful'
+            }
+          ]
+        },
+        {
+          id: 'cow-4',
+          name: 'Molly',
+          tagNumber: '004',
+          breed: 'Angus',
+          category: 'Cow',
+          gender: 'Female',
+          dateOfBirth: '2021-11-08',
+          status: 'Active',
+          productionStatus: 'Milking',
+          location: 'Barn A',
+          notes: 'Beef cow',
+          healthRecords: [
+            {
+              id: 'health-7',
+              type: 'Injury',
+              date: '2024-01-30',
+              description: 'Minor leg injury from fence',
+              duration: '14'
+            },
+            {
+              id: 'health-8',
+              type: 'Deworming',
+              date: '2024-02-05',
+              description: 'Routine deworming treatment',
+              duration: '90'
+            }
+          ]
+        },
+        {
+          id: 'cow-5',
+          name: 'Sunny',
+          tagNumber: '005',
+          breed: 'Holstein',
+          category: 'Cow',
+          gender: 'Female',
+          dateOfBirth: '2020-12-03',
+          status: 'Active',
+          productionStatus: 'Milking',
+          location: 'Barn B',
+          notes: 'Perfect health record',
+          healthRecords: [
+            {
+              id: 'health-9',
+              type: 'Vaccination',
+              date: '2024-02-01',
+              description: 'Annual vaccination schedule completed'
+            },
+            {
+              id: 'health-10',
+              type: 'Routine Checkup',
+              date: '2024-02-15',
+              description: 'Regular health check - all good'
+            }
+          ]
+        }
+      ];
+      
+      setCows(sampleCows);
+      console.log('✅ Created sample cows with health records for demonstration');
     }
   }, []);
 
@@ -176,8 +403,7 @@ function App() {
         
         // Deworming treatments
         const dewormingRecords = cow.healthRecords.filter(record => 
-          record.type === 'Treatment' && record.description && 
-          record.description.toLowerCase().includes('deworm')
+          record.type === 'Deworming'
         );
         
         dewormingRecords.forEach(dewormRecord => {
@@ -203,8 +429,7 @@ function App() {
         
         // Hoof trimming
         const hoofRecords = cow.healthRecords.filter(record => 
-          record.type === 'Treatment' && record.description && 
-          record.description.toLowerCase().includes('hoof')
+          record.type === 'Hoof Trimming'
         );
         
         hoofRecords.forEach(hoofRecord => {
@@ -223,6 +448,98 @@ function App() {
               priority: 'medium',
               type: 'health',
               time: timeText,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Mastitis monitoring (serious udder infection)
+        const mastitisRecords = cow.healthRecords.filter(record => 
+          record.type === 'Mastitis'
+        );
+        
+        mastitisRecords.forEach(mastitisRecord => {
+          const mastitisDate = new Date(mastitisRecord.date);
+          const daysSinceMastitis = Math.round((today - mastitisDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if follow-up is needed (within 7 days of mastitis diagnosis)
+          if (daysSinceMastitis <= 7 && !mastitisRecord.followUpCompleted) {
+            alerts.push({
+              id: `mastitis-followup-${cow.id}-${mastitisRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Mastitis follow-up needed: ${mastitisRecord.description || 'udder infection'}`,
+              priority: 'high',
+              type: 'health',
+              time: `${daysSinceMastitis} days ago`,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // D.A. (Displaced Abomasum) monitoring (serious digestive issue)
+        const daRecords = cow.healthRecords.filter(record => 
+          record.type === 'D.A.'
+        );
+        
+        daRecords.forEach(daRecord => {
+          const daDate = new Date(daRecord.date);
+          const daysSinceDA = Math.round((today - daDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if follow-up is needed (within 14 days of D.A. diagnosis)
+          if (daysSinceDA <= 14 && !daRecord.followUpCompleted) {
+            alerts.push({
+              id: `da-followup-${cow.id}-${daRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `D.A. follow-up needed: ${daRecord.description || 'displaced abomasum'}`,
+              priority: 'high',
+              type: 'health',
+              time: `${daysSinceDA} days ago`,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Cystic ovaries monitoring (reproductive issue)
+        const cysticRecords = cow.healthRecords.filter(record => 
+          record.type === 'Cystic'
+        );
+        
+        cysticRecords.forEach(cysticRecord => {
+          const cysticDate = new Date(cysticRecord.date);
+          const daysSinceCystic = Math.round((today - cysticDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if follow-up is needed (within 30 days of cystic diagnosis)
+          if (daysSinceCystic <= 30 && !cysticRecord.followUpCompleted) {
+            alerts.push({
+              id: `cystic-followup-${cow.id}-${cysticRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Cystic ovaries follow-up needed: ${cysticRecord.description || 'reproductive issue'}`,
+              priority: 'medium',
+              type: 'health',
+              time: `${daysSinceCystic} days ago`,
+              cowId: cow.id
+            });
+          }
+        });
+        
+        // Surgery recovery monitoring
+        const surgeryRecords = cow.healthRecords.filter(record => 
+          record.type === 'Surgery'
+        );
+        
+        surgeryRecords.forEach(surgeryRecord => {
+          const surgeryDate = new Date(surgeryRecord.date);
+          const daysSinceSurgery = Math.round((today - surgeryDate) / (1000 * 60 * 60 * 24));
+          
+          // Check if recovery monitoring is needed (within 30 days of surgery)
+          if (daysSinceSurgery <= 30 && !surgeryRecord.recoveryCompleted) {
+            alerts.push({
+              id: `surgery-recovery-${cow.id}-${surgeryRecord.id}`,
+              cow: `${cow.name} #${cow.tagNumber}`,
+              message: `Surgery recovery monitoring: ${surgeryRecord.description || 'post-operative care'}`,
+              priority: 'high',
+              type: 'health',
+              time: `${daysSinceSurgery} days ago`,
               cowId: cow.id
             });
           }
@@ -303,6 +620,28 @@ function App() {
       }
     });
     
+    // 5. Bull Inventory Reorder Alerts
+    bullInventory.forEach(bull => {
+      if (bull.straws <= 5) {
+        const priority = bull.straws === 0 ? 'critical' : 
+                        bull.straws <= 2 ? 'high' : 'medium';
+        
+        const message = bull.straws === 0 
+          ? `Re-order ${bull.name} - Out of stock`
+          : `Re-order ${bull.name} - Only ${bull.straws} straws remaining`;
+        
+        alerts.push({
+          id: `reorder-${bull.naabCode}`,
+          cow: bull.name,
+          message: message,
+          priority: priority,
+          type: 'inventory',
+          time: 'Now',
+          bullId: bull.naabCode
+        });
+      }
+    });
+    
     // Sort alerts by priority (critical > high > medium) and then by urgency
     const priorityOrder = { critical: 3, high: 2, medium: 1 };
     return alerts.sort((a, b) => {
@@ -310,8 +649,8 @@ function App() {
       const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
       if (priorityDiff !== 0) return priorityDiff;
       
-      // Then sort by type (calving > breeding > health)
-      const typeOrder = { calving: 3, breeding: 2, health: 1 };
+      // Then sort by type (calving > breeding > health > inventory)
+      const typeOrder = { calving: 4, breeding: 3, health: 2, inventory: 1 };
       return typeOrder[b.type] - typeOrder[a.type];
     });
   };
@@ -432,22 +771,80 @@ function App() {
     console.log('✅ Updated bull inventory:', updatedBullInventory.length, 'bulls');
   };
 
-  const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId) => {
-    console.log('🐄 handleBreedingRecordSaved called with:', { cow: cow.name, breedingRecord, selectedBullId });
+  const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
+    console.log('🐄 handleBreedingRecordSaved called with:', { 
+      cow: cow.name, 
+      breedingRecord, 
+      selectedBullId, 
+      isEditing, 
+      oldBreedingRecord 
+    });
 
     // Note: Breeding record is already added to cow via onUpdateCow in CowProfileModal
-    // This function only handles bull inventory updates
+    // This function handles bull inventory updates
 
-    // Reduce bull straw count by 1
     setBullInventory(prevInventory => {
-      const updatedInventory = prevInventory.map(bull => 
-        bull.naabCode === selectedBullId ? { ...bull, straws: Math.max(0, bull.straws - 1) } : bull
-      );
+      let updatedInventory = [...prevInventory];
+
+      if (isEditing && oldBreedingRecord) {
+        // Handle editing: restore old bull's straw count and reduce new bull's count
+        const oldBull = updatedInventory.find(bull => bull.naabCode === oldBreedingRecord.semenId);
+        if (oldBull) {
+          oldBull.straws = Math.max(0, oldBull.straws + 1);
+          console.log(`🔄 Restored 1 straw to ${oldBull.name} (${oldBull.naabCode}) - now has ${oldBull.straws} straws`);
+        }
+
+        const newBull = updatedInventory.find(bull => bull.naabCode === selectedBullId);
+        if (newBull) {
+          if (newBull.straws <= 0) {
+            console.warn(`⚠️ Warning: ${newBull.name} (${newBull.naabCode}) has no straws available!`);
+          }
+          newBull.straws = Math.max(0, newBull.straws - 1);
+          console.log(`🔄 Reduced 1 straw from ${newBull.name} (${newBull.naabCode}) - now has ${newBull.straws} straws`);
+        }
+      } else {
+        // Handle new breeding record: reduce bull straw count by 1
+        const selectedBull = updatedInventory.find(bull => bull.naabCode === selectedBullId);
+        if (selectedBull) {
+          if (selectedBull.straws <= 0) {
+            console.warn(`⚠️ Warning: ${selectedBull.name} (${selectedBull.naabCode}) has no straws available!`);
+          }
+          selectedBull.straws = Math.max(0, selectedBull.straws - 1);
+          console.log(`🔄 Reduced 1 straw from ${selectedBull.name} (${selectedBull.naabCode}) - now has ${selectedBull.straws} straws`);
+        } else {
+          console.warn(`⚠️ Warning: Bull with NAAB code ${selectedBullId} not found in inventory!`);
+        }
+      }
+
       console.log('🐄 Updated bull inventory:', updatedInventory.length, 'bulls');
       return updatedInventory;
     });
 
     console.log('✅ Bull inventory updated for breeding record');
+  };
+
+  const handleBreedingRecordDeleted = (cow, deletedBreedingRecord) => {
+    console.log('🐄 handleBreedingRecordDeleted called with:', { 
+      cow: cow.name, 
+      deletedBreedingRecord 
+    });
+
+    // Restore bull straw count by 1 when breeding record is deleted
+    setBullInventory(prevInventory => {
+      const updatedInventory = prevInventory.map(bull => {
+        if (bull.naabCode === deletedBreedingRecord.semenId) {
+          const newStrawCount = bull.straws + 1;
+          console.log(`🔄 Restored 1 straw to ${bull.name} (${bull.naabCode}) - now has ${newStrawCount} straws`);
+          return { ...bull, straws: newStrawCount };
+        }
+        return bull;
+      });
+      
+      console.log('🐄 Updated bull inventory after deletion:', updatedInventory.length, 'bulls');
+      return updatedInventory;
+    });
+
+    console.log('✅ Bull inventory restored after breeding record deletion');
   };
 
   // Get cows in heat today
@@ -473,7 +870,7 @@ function App() {
     total: { value: cows.length, change: '+12', trend: 'up' },
     pregnant: { value: cows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length, change: '+5', trend: 'up' },
     breeding: { value: getCowsInHeatToday().length, change: '-2', trend: 'down' },
-    health: { value: Math.round((cows.filter(cow => cow.status === 'Active').length / Math.max(cows.length, 1)) * 100), change: '+1', trend: 'up' }
+    health: { value: calculateHerdHealthScore(cows), change: '+1', trend: 'up' }
   };
 
   // Navigation items with better organization
@@ -657,7 +1054,9 @@ function App() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Health Score</p>
-                      <p className="text-3xl font-bold text-slate-900">{updatedMetrics.health.value}%</p>
+                      <p className={`text-3xl font-bold ${getHealthScoreBadge(updatedMetrics.health.value).className.replace('px-3 py-1 text-sm font-bold rounded-full', '')}`}>
+                        {updatedMetrics.health.value}%
+                      </p>
                   </div>
                     <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
                       <Activity className="w-6 h-6 text-emerald-600" />
@@ -698,21 +1097,34 @@ function App() {
                           }`}></div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between">
-                              <p className="font-medium text-slate-900">{alert.cow}</p>
+                              <div className="flex items-center space-x-2">
+                                <p className="font-medium text-slate-900">{alert.cow}</p>
+                                {alert.type === 'inventory' && (
+                                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                    Inventory
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-sm text-slate-500">{alert.time}</span>
                             </div>
                             <p className="text-sm text-slate-600 mt-1">{alert.message}</p>
                           </div>
                           <button 
                             onClick={() => {
-                              const cow = cows.find(c => c.id === alert.cowId);
-                              if (cow) {
-                                handleViewProfile(cow);
+                              if (alert.type === 'inventory') {
+                                // For inventory alerts, navigate to Breeding Center
+                                setCurrentView('breeding');
+                              } else {
+                                // For other alerts, open cow profile
+                                const cow = cows.find(c => c.id === alert.cowId);
+                                if (cow) {
+                                  handleViewProfile(cow);
+                                }
                               }
                             }}
                             className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                           >
-                            View
+                            {alert.type === 'inventory' ? 'Manage Inventory' : 'View'}
                           </button>
                         </div>
                       ))
@@ -796,6 +1208,7 @@ function App() {
           {currentView === 'analytics' && (
             <AnalyticsView
               cows={cows}
+              bullInventory={bullInventory}
             />
           )}
 
@@ -821,7 +1234,8 @@ function App() {
         onUpdateCow={handleUpdateCowFromProfile}
         bullInventory={bullInventory}
         onBreedingRecordSaved={handleBreedingRecordSaved}
-        onAddCow={handleSaveCow}
+        onBreedingRecordDeleted={handleBreedingRecordDeleted}
+        onAddCow={handleAddCow}
         cows={cows}
         onUpdateBullInventory={handleUpdateBullInventory}
       />
