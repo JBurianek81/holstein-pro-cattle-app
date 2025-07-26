@@ -298,7 +298,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       console.log('💾 Created backup before bulk import:', backupKey);
     } catch (error) {
       console.error('❌ Failed to create backup before bulk import:', error);
-      if (!confirm('Warning: Could not create backup before import. Continue anyway?')) {
+      if (!window.confirm('Warning: Could not create backup before import. Continue anyway?')) {
         return;
       }
     }
@@ -545,7 +545,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       const backupData = localStorage.getItem(backupKey);
       const parsedData = JSON.parse(backupData);
       
-      if (confirm(`Restore data from backup created at ${backupKey}? This will replace current data.`)) {
+      if (window.confirm(`Restore data from backup created at ${backupKey}? This will replace current data.`)) {
         if (onUpdateCows) {
           onUpdateCows(parsedData);
           console.log('🔄 Restored data from backup:', backupKey);
