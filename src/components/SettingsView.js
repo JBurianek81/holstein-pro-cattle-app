@@ -29,6 +29,7 @@ import {
   X
 } from 'lucide-react';
 import { generateFarmCode } from '../utils/farmCodeUtils';
+import { createCowRecord, calculateReproductiveStatus } from '../utils/cowDataModel';
 
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -62,6 +63,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   const [bulkImportData, setBulkImportData] = useState([]);
   const [importErrors, setImportErrors] = useState([]);
   const [importSuccess, setImportSuccess] = useState(false);
+  const [importedCount, setImportedCount] = useState(0);
   const [showTemplateInstructions, setShowTemplateInstructions] = useState(false);
 
 
@@ -213,6 +215,21 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     const existingTags = new Set(cows.map(cow => cow.tagNumber));
     const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
     
+    // Check for duplicates within the CSV file itself
+    const csvTags = new Set();
+    const duplicateTagsInCSV = new Set();
+    
+    data.forEach((row, index) => {
+      const tagNumber = row.tagNumber?.trim();
+      if (tagNumber) {
+        if (csvTags.has(tagNumber)) {
+          duplicateTagsInCSV.add(tagNumber);
+        } else {
+          csvTags.add(tagNumber);
+        }
+      }
+    });
+    
     data.forEach((row, index) => {
       const rowErrors = [];
       
@@ -246,9 +263,18 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         rowErrors.push(`Category '${row.category}' must be one of: ${validCategories.join(', ')}`);
       }
       
-      // Duplicate tag number check
-      if (row.tagNumber?.trim() && existingTags.has(row.tagNumber.trim())) {
-        rowErrors.push(`Tag number '${row.tagNumber}' already exists in your herd`);
+      // Duplicate tag number checks
+      const tagNumber = row.tagNumber?.trim();
+      if (tagNumber) {
+        // Check against existing herd
+        if (existingTags.has(tagNumber)) {
+          rowErrors.push(`Tag number '${tagNumber}' already exists in your herd`);
+        }
+        
+        // Check against duplicates within CSV
+        if (duplicateTagsInCSV.has(tagNumber)) {
+          rowErrors.push(`Tag number '${tagNumber}' appears multiple times in the CSV file`);
+        }
       }
       
       if (rowErrors.length > 0) {
@@ -303,42 +329,61 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       }
     }
     
-    // Import valid records
-    const newCows = validData.map(row => ({
-      id: Date.now() + Math.random(),
-      tagNumber: row.tagNumber.trim(),
-      name: row.name?.trim() || '',
-      dateOfBirth: row.dateOfBirth.trim(),
-      category: row.category.trim(),
-      breed: row.breed?.trim() || '',
-      sire: row.sire?.trim() || '',
-      dam: row.dam?.trim() || '',
-      location: row.location?.trim() || '',
-      notes: row.notes?.trim() || '',
-      status: row.status?.trim() || 'Active',
-      archived: false,
-      breedingRecords: [],
-      healthRecords: [],
-      calvingRecords: []
-    }));
+    // Process uploaded animals with proper data structure
+    const newCows = validData.map(row => {
+      // Create base cow record with proper ID generation and timestamps
+      const cowData = {
+        tagNumber: row.tagNumber.trim(),
+        name: row.name?.trim() || '',
+        dateOfBirth: row.dateOfBirth.trim(),
+        category: row.category.trim(),
+        breed: row.breed?.trim() || '',
+        gender: row.gender?.trim() || 'Female', // Default to Female for most cattle
+        sire: row.sire?.trim() || '',
+        dam: row.dam?.trim() || '',
+        location: row.location?.trim() || '',
+        notes: row.notes?.trim() || '',
+        status: row.status?.trim() || 'Active',
+        productionStatus: row.productionStatus?.trim() || 'Non-Milking',
+        archived: false,
+        // Initialize empty arrays for records
+        healthRecords: [],
+        breedingRecords: [],
+        calvingRecords: []
+      };
+      
+      // Use createCowRecord to ensure proper data structure and ID generation
+      const cowRecord = createCowRecord(cowData);
+      
+      // Calculate reproductive status based on the cow data
+      cowRecord.reproductiveStatus = calculateReproductiveStatus(cowRecord);
+      
+      return cowRecord;
+    });
     
-    // Use centralized state management instead of direct localStorage access
-    if (onUpdateCows) {
-      const updatedCows = [...cows, ...newCows];
-      onUpdateCows(updatedCows);
-      console.log('✅ Bulk import completed:', newCows.length, 'new animals added');
+          // Use centralized state management to add animals to main herd
+      if (onUpdateCows) {
+        const updatedCows = [...cows, ...newCows];
+        onUpdateCows(updatedCows);
+        console.log('✅ Bulk import completed:', newCows.length, 'new animals added to herd');
+        
+        // Show success notification with count
+        setImportedCount(newCows.length);
+        setImportSuccess(true);
+        setShowImportPreview(false);
+        setBulkImportData([]);
+        setImportErrors([]);
+        
+        // Auto-dismiss success message after 4 seconds
+        setTimeout(() => {
+          setImportSuccess(false);
+          setImportedCount(0);
+        }, 4000);
     } else {
       console.error('❌ onUpdateCows function not provided - cannot complete bulk import');
       alert('Error: Cannot complete bulk import. Please try again.');
       return;
     }
-    
-    setImportSuccess(true);
-    setShowImportPreview(false);
-    setBulkImportData([]);
-    setImportErrors([]);
-    
-    setTimeout(() => setImportSuccess(false), 3000);
   };
 
   // Farm Settings State
@@ -1660,7 +1705,9 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         <div className="fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50">
           <div className="flex items-center space-x-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
-            <span className="text-green-800 font-medium">Herd data imported successfully!</span>
+            <span className="text-green-800 font-medium">
+              Successfully imported {importedCount} animal{importedCount !== 1 ? 's' : ''} to your herd!
+            </span>
           </div>
         </div>
       )}
