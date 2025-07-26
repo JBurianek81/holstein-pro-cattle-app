@@ -47,6 +47,7 @@ function App() {
 
   // Cow management state
   const [cows, setCows] = useState([]);
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
   const [profileCow, setProfileCow] = useState(null);
@@ -112,6 +113,10 @@ function App() {
         console.log('📂 No existing data found in localStorage, starting with empty herd');
         setCows([]);
       }
+      
+      // Mark initial load as complete
+      setIsInitialLoadComplete(true);
+      console.log('✅ Initial load complete');
     } catch (error) {
       console.error('❌ Error loading cows from localStorage:', error);
       // Backup corrupted data and start fresh
@@ -144,6 +149,21 @@ function App() {
 
   // Save cows to localStorage whenever cows state changes
   useEffect(() => {
+    // Only save after initial load is complete to prevent race conditions
+    if (!isInitialLoadComplete) {
+      console.log('🔄 Skipping save - initial load not complete yet');
+      return;
+    }
+    
+    // Skip saving if cows is still the initial empty array (prevents overwriting on first load)
+    if (cows.length === 0) {
+      const existingData = localStorage.getItem('cattleAppCows');
+      if (existingData) {
+        console.log('🔄 Skipping save - cows array is empty but localStorage has data (likely initial load)');
+        return;
+      }
+    }
+    
     try {
       console.log('💾 SAVING to localStorage:', cows.length, 'animals');
       
@@ -182,7 +202,7 @@ function App() {
         console.error('❌ Failed to create backup:', backupError);
       }
     }
-  }, [cows]);
+  }, [cows, isInitialLoadComplete]);
 
   // Generate comprehensive dynamic priority alerts from cow records
   const generatePriorityAlerts = () => {
@@ -762,6 +782,27 @@ function App() {
     // Note: In a real implementation, you would pass a filter state to HerdManagement
     // For now, we'll just navigate to the herd management view
   };
+
+  // Debug function to test localStorage
+  const debugLocalStorage = () => {
+    console.log('🔍 DEBUG: Current cows state:', cows.length, 'animals');
+    console.log('🔍 DEBUG: localStorage data:', localStorage.getItem('cattleAppCows'));
+    console.log('🔍 DEBUG: Initial load complete:', isInitialLoadComplete);
+    
+    // Test save
+    const testCow = {
+      id: 'debug-test-' + Date.now(),
+      tagNumber: 'DEBUG001',
+      name: 'Debug Test Cow',
+      dateOfBirth: '2020-01-01',
+      category: 'Cow',
+      status: 'Active'
+    };
+    
+    const updatedCows = [...cows, testCow];
+    setCows(updatedCows);
+    console.log('🔍 DEBUG: Added test cow, new count:', updatedCows.length);
+  };
   
   // Update metrics based on current cows data
   const updatedMetrics = {
@@ -872,6 +913,16 @@ function App() {
               </div>
               
             <div className="flex items-center space-x-4">
+              {/* Debug Button (only on dashboard) */}
+              {currentView === 'dashboard' && (
+                <button
+                  onClick={debugLocalStorage}
+                  className="bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 transition-colors text-sm"
+                >
+                  Debug Storage
+                </button>
+              )}
+              
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
