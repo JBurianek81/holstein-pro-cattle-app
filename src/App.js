@@ -100,8 +100,21 @@ function App() {
         
         // Validate the loaded data
         if (Array.isArray(parsedCows)) {
-          setCows(parsedCows);
-          console.log('✅ Successfully loaded cows from localStorage:', parsedCows.length);
+          // Clean up any debug test cows that might have been added during testing
+          const cleanedCows = parsedCows.filter(cow => 
+            !cow.id?.includes('debug-test-') && 
+            !cow.tagNumber?.includes('DEBUG') &&
+            !cow.name?.includes('Debug Test Cow')
+          );
+          
+          if (cleanedCows.length !== parsedCows.length) {
+            console.log('🧹 Cleaned up', parsedCows.length - cleanedCows.length, 'debug test cows');
+            setCows(cleanedCows);
+          } else {
+            setCows(parsedCows);
+          }
+          
+          console.log('✅ Successfully loaded cows from localStorage:', cleanedCows.length);
         } else {
           console.error('❌ Invalid data format in localStorage - expected array, got:', typeof parsedCows);
           // Backup corrupted data and start fresh
@@ -783,26 +796,7 @@ function App() {
     // For now, we'll just navigate to the herd management view
   };
 
-  // Debug function to test localStorage
-  const debugLocalStorage = () => {
-    console.log('🔍 DEBUG: Current cows state:', cows.length, 'animals');
-    console.log('🔍 DEBUG: localStorage data:', localStorage.getItem('cattleAppCows'));
-    console.log('🔍 DEBUG: Initial load complete:', isInitialLoadComplete);
-    
-    // Test save
-    const testCow = {
-      id: 'debug-test-' + Date.now(),
-      tagNumber: 'DEBUG001',
-      name: 'Debug Test Cow',
-      dateOfBirth: '2020-01-01',
-      category: 'Cow',
-      status: 'Active'
-    };
-    
-    const updatedCows = [...cows, testCow];
-    setCows(updatedCows);
-    console.log('🔍 DEBUG: Added test cow, new count:', updatedCows.length);
-  };
+
   
   // Update metrics based on current cows data
   const updatedMetrics = {
@@ -913,16 +907,6 @@ function App() {
               </div>
               
             <div className="flex items-center space-x-4">
-              {/* Debug Button (only on dashboard) */}
-              {currentView === 'dashboard' && (
-                <button
-                  onClick={debugLocalStorage}
-                  className="bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 transition-colors text-sm"
-                >
-                  Debug Storage
-                </button>
-              )}
-              
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
