@@ -91,13 +91,40 @@ function App() {
   useEffect(() => {
     try {
       const savedCows = localStorage.getItem('cattleAppCows');
+      console.log('📂 LOADING from localStorage:', savedCows ? 'Found data' : 'No data');
+      
       if (savedCows) {
         const parsedCows = JSON.parse(savedCows);
-        setCows(parsedCows);
-        console.log('✅ Loaded cows from localStorage:', parsedCows.length);
+        console.log('📂 LOADED:', parsedCows.length, 'animals');
+        
+        // Validate the loaded data
+        if (Array.isArray(parsedCows)) {
+          setCows(parsedCows);
+          console.log('✅ Successfully loaded cows from localStorage:', parsedCows.length);
+        } else {
+          console.error('❌ Invalid data format in localStorage - expected array, got:', typeof parsedCows);
+          // Backup corrupted data and start fresh
+          localStorage.setItem('cattleAppCows_backup_' + Date.now(), savedCows);
+          localStorage.removeItem('cattleAppCows');
+          setCows([]);
+        }
+      } else {
+        console.log('📂 No existing data found in localStorage, starting with empty herd');
+        setCows([]);
       }
     } catch (error) {
       console.error('❌ Error loading cows from localStorage:', error);
+      // Backup corrupted data and start fresh
+      try {
+        const corruptedData = localStorage.getItem('cattleAppCows');
+        if (corruptedData) {
+          localStorage.setItem('cattleAppCows_backup_' + Date.now(), corruptedData);
+        }
+      } catch (backupError) {
+        console.error('❌ Failed to backup corrupted data:', backupError);
+      }
+      localStorage.removeItem('cattleAppCows');
+      setCows([]);
     }
 
     // Load profile data from localStorage
@@ -117,8 +144,44 @@ function App() {
 
   // Save cows to localStorage whenever cows state changes
   useEffect(() => {
-    localStorage.setItem('cattleAppCows', JSON.stringify(cows));
-    console.log('💾 Saved cows to localStorage:', cows.length);
+    try {
+      console.log('💾 SAVING to localStorage:', cows.length, 'animals');
+      
+      // Validate data before saving
+      if (!Array.isArray(cows)) {
+        console.error('❌ Invalid cows data - expected array, got:', typeof cows);
+        return;
+      }
+      
+      // Create a backup before overwriting
+      const existingData = localStorage.getItem('cattleAppCows');
+      if (existingData && cows.length === 0) {
+        console.warn('⚠️ WARNING: Attempting to save empty cows array when existing data exists');
+        console.warn('⚠️ This could indicate data loss - creating backup');
+        localStorage.setItem('cattleAppCows_backup_' + Date.now(), existingData);
+      }
+      
+      const cowsData = JSON.stringify(cows);
+      localStorage.setItem('cattleAppCows', cowsData);
+      console.log('💾 SAVED successfully - Data size:', cowsData.length, 'characters');
+      
+      // Verify the save was successful
+      const verifyData = localStorage.getItem('cattleAppCows');
+      if (verifyData === cowsData) {
+        console.log('✅ Save verification successful');
+      } else {
+        console.error('❌ Save verification failed - data mismatch');
+      }
+    } catch (error) {
+      console.error('❌ Error saving cows to localStorage:', error);
+      // Try to save a backup
+      try {
+        localStorage.setItem('cattleAppCows_backup_' + Date.now(), JSON.stringify(cows));
+        console.log('💾 Created backup due to save error');
+      } catch (backupError) {
+        console.error('❌ Failed to create backup:', backupError);
+      }
+    }
   }, [cows]);
 
   // Generate comprehensive dynamic priority alerts from cow records
@@ -1036,7 +1099,9 @@ function App() {
           {currentView === 'settings' && (
             <SettingsView 
               profileData={profileData} 
-              onProfileUpdate={handleProfileUpdate} 
+              onProfileUpdate={handleProfileUpdate}
+              cows={cows}
+              onUpdateCows={setCows}
             />
           )}
         </main>

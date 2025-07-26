@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { generateFarmCode } from '../utils/farmCodeUtils';
 
-const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
+const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -210,8 +210,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
   // Validate import data
   const validateImportData = (data) => {
     const errors = [];
-    const existingCows = JSON.parse(localStorage.getItem('cattleAppCows') || '[]');
-    const existingTags = new Set(existingCows.map(cow => cow.tagNumber));
+    const existingTags = new Set(cows.map(cow => cow.tagNumber));
     const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
     
     data.forEach((row, index) => {
@@ -292,8 +291,19 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       return;
     }
     
+    // Data protection: Create backup before bulk import
+    try {
+      const backupKey = `cattleAppCows_backup_bulk_import_${Date.now()}`;
+      localStorage.setItem(backupKey, JSON.stringify(cows));
+      console.log('💾 Created backup before bulk import:', backupKey);
+    } catch (error) {
+      console.error('❌ Failed to create backup before bulk import:', error);
+      if (!confirm('Warning: Could not create backup before import. Continue anyway?')) {
+        return;
+      }
+    }
+    
     // Import valid records
-    const existingCows = JSON.parse(localStorage.getItem('cattleAppCows') || '[]');
     const newCows = validData.map(row => ({
       id: Date.now() + Math.random(),
       tagNumber: row.tagNumber.trim(),
@@ -312,8 +322,16 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       calvingRecords: []
     }));
     
-    const updatedCows = [...existingCows, ...newCows];
-    localStorage.setItem('cattleAppCows', JSON.stringify(updatedCows));
+    // Use centralized state management instead of direct localStorage access
+    if (onUpdateCows) {
+      const updatedCows = [...cows, ...newCows];
+      onUpdateCows(updatedCows);
+      console.log('✅ Bulk import completed:', newCows.length, 'new animals added');
+    } else {
+      console.error('❌ onUpdateCows function not provided - cannot complete bulk import');
+      alert('Error: Cannot complete bulk import. Please try again.');
+      return;
+    }
     
     setImportSuccess(true);
     setShowImportPreview(false);
@@ -433,7 +451,6 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
 
   // Export data
   const exportData = () => {
-    const cows = JSON.parse(localStorage.getItem('cattleAppCows') || '[]');
     const settings = {
       profile: profileData,
       farm: farmSettings,
@@ -463,9 +480,15 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       reader.onload = (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.cows) {
-            localStorage.setItem('cattleAppCows', JSON.stringify(data.cows));
+          
+          // Use centralized state management for cows data
+          if (data.cows && onUpdateCows) {
+            console.log('📥 Importing cows data:', data.cows.length, 'animals');
+            onUpdateCows(data.cows);
+          } else if (data.cows) {
+            console.error('❌ onUpdateCows function not provided - cannot import cows data');
           }
+          
           if (data.profile) setProfileData(data.profile);
           if (data.farm) setFarmSettings(data.farm);
           if (data.notifications) setNotifications(data.notifications);
@@ -474,6 +497,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
           setShowImportSuccess(true);
           setTimeout(() => setShowImportSuccess(false), 3000);
         } catch (error) {
+          console.error('❌ Error importing data:', error);
           alert('Invalid backup file format');
         }
       };
@@ -483,10 +507,55 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
 
   // Clear all data
   const clearAllData = () => {
-    localStorage.removeItem('cattleAppCows');
+    // Data protection: Create backup before clearing
+    try {
+      const backupKey = `cattleAppCows_backup_clear_${Date.now()}`;
+      localStorage.setItem(backupKey, JSON.stringify(cows));
+      console.log('💾 Created backup before clearing data:', backupKey);
+    } catch (error) {
+      console.error('❌ Failed to create backup before clearing:', error);
+    }
+    
+    // Use centralized state management
+    if (onUpdateCows) {
+      onUpdateCows([]);
+      console.log('🗑️ Cleared all cows data via centralized state management');
+    }
+    
     localStorage.removeItem('holsteinProSettings');
     setShowDeleteConfirm(false);
+    
+    // Reload page to reset all state
     window.location.reload();
+  };
+
+  // Data recovery function
+  const recoverFromBackup = () => {
+    const backupKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('cattleAppCows_backup_')
+    ).sort().reverse(); // Most recent first
+    
+    if (backupKeys.length === 0) {
+      alert('No backup data found');
+      return;
+    }
+    
+    const backupKey = backupKeys[0]; // Use most recent backup
+    try {
+      const backupData = localStorage.getItem(backupKey);
+      const parsedData = JSON.parse(backupData);
+      
+      if (confirm(`Restore data from backup created at ${backupKey}? This will replace current data.`)) {
+        if (onUpdateCows) {
+          onUpdateCows(parsedData);
+          console.log('🔄 Restored data from backup:', backupKey);
+          alert('Data restored successfully!');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error restoring from backup:', error);
+      alert('Error restoring from backup');
+    }
   };
 
   const tabs = [
@@ -1171,6 +1240,23 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                   </p>
                   <button className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                     Configure Backup
+                  </button>
+                </div>
+
+                {/* Data Recovery */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Activity className="w-6 h-6 text-yellow-600" />
+                    <h3 className="text-lg font-semibold text-yellow-900">Data Recovery</h3>
+                  </div>
+                  <p className="text-yellow-700 mb-4">
+                    Restore data from automatic backups created before bulk operations.
+                  </p>
+                  <button
+                    onClick={recoverFromBackup}
+                    className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+                  >
+                    Recover Data
                   </button>
                 </div>
 
