@@ -125,12 +125,13 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       '# IMPORTANT: Date format must be YYYY-MM-DD (example: 1995-03-15)',
       '# Do not let Excel auto-format dates - keep as text format',
       '# Category must be: Cow, Heifer, Calf, or Bull',
+      '# Production Status options: Milking, Non-milking, Dry (defaults based on category if blank)',
       '# Tag numbers must be unique',
       '# Required fields: tagNumber, dateOfBirth, category',
-      '# Optional fields: name, breed, sire, dam, location, notes, status'
+      '# Optional fields: name, breed, productionStatus, sire, dam, location, notes, status'
     ];
     
-    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'sire', 'dam', 'location', 'notes', 'status'];
+    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'productionStatus', 'sire', 'dam', 'location', 'notes', 'status'];
     
     // Create clean template with only headers (no sample data)
     let csvContent = instructions.join('\n') + '\n';
@@ -207,6 +208,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     const errors = [];
     const existingTags = new Set(cows.map(cow => cow.tagNumber));
     const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
+    const validProductionStatuses = ['Milking', 'Non-milking', 'Dry'];
     
     // Check for duplicates within the CSV file itself
     const csvTags = new Set();
@@ -254,6 +256,11 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         rowErrors.push('Category is required');
       } else if (!validCategories.includes(row.category)) {
         rowErrors.push(`Category '${row.category}' must be one of: ${validCategories.join(', ')}`);
+      }
+      
+      // Production Status validation (optional field)
+      if (row.productionStatus?.trim() && !validProductionStatuses.includes(row.productionStatus)) {
+        rowErrors.push(`Production Status '${row.productionStatus}' must be one of: ${validProductionStatuses.join(', ')}`);
       }
       
       // Duplicate tag number checks
@@ -324,6 +331,27 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     
     // Process uploaded animals with proper data structure
     const newCows = validData.map(row => {
+      // Auto-calculate production status based on category if not provided
+      let productionStatus = row.productionStatus?.trim();
+      if (!productionStatus) {
+        switch (row.category?.trim()) {
+          case 'Cow':
+            productionStatus = 'Non-milking'; // Default for adult cows
+            break;
+          case 'Heifer':
+            productionStatus = 'Non-milking'; // Heifers are not yet milking
+            break;
+          case 'Calf':
+            productionStatus = 'Non-milking'; // Calves are not milking
+            break;
+          case 'Bull':
+            productionStatus = 'Non-milking'; // Bulls don't produce milk
+            break;
+          default:
+            productionStatus = 'Non-milking';
+        }
+      }
+      
       // Create base cow record with proper ID generation and timestamps
       const cowData = {
         tagNumber: row.tagNumber.trim(),
@@ -337,7 +365,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         location: row.location?.trim() || '',
         notes: row.notes?.trim() || '',
         status: row.status?.trim() || 'Active',
-        productionStatus: row.productionStatus?.trim() || 'Non-Milking',
+        productionStatus: productionStatus,
         archived: false,
         // Initialize empty arrays for records
         healthRecords: [],
@@ -1791,15 +1819,39 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                       <ul className="space-y-1 text-green-700">
                         <li>• <strong>name</strong> - Animal name</li>
                         <li>• <strong>breed</strong> - Animal breed</li>
+                        <li>• <strong>productionStatus</strong> - Milking status</li>
                         <li>• <strong>sire</strong> - Father's ID</li>
-                        <li>• <strong>dam</strong> - Mother's ID</li>
                       </ul>
                     </div>
                     <div>
                       <ul className="space-y-1 text-green-700">
+                        <li>• <strong>dam</strong> - Mother's ID</li>
                         <li>• <strong>location</strong> - Current location</li>
                         <li>• <strong>notes</strong> - Additional notes</li>
                         <li>• <strong>status</strong> - Defaults to "Active"</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Production Status Options */}
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-purple-900 mb-3">🥛 Production Status Options</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="font-medium text-purple-800 mb-2">Available options:</p>
+                      <ul className="space-y-1 text-purple-700">
+                        <li>• <strong>Milking</strong> - Currently producing milk</li>
+                        <li>• <strong>Non-milking</strong> - Not currently milking</li>
+                        <li>• <strong>Dry</strong> - Dry period between lactations</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-medium text-purple-800 mb-2">Auto-calculation:</p>
+                      <ul className="space-y-1 text-purple-700">
+                        <li>• <strong>If left blank</strong> - Defaults to "Non-milking"</li>
+                        <li>• <strong>Based on category</strong> - Appropriate for animal type</li>
+                        <li>• <strong>Can be updated later</strong> - Through individual profiles</li>
                       </ul>
                     </div>
                   </div>
