@@ -57,6 +57,12 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
 
+  // Bulk Import State
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [bulkImportData, setBulkImportData] = useState([]);
+  const [importErrors, setImportErrors] = useState([]);
+  const [importSuccess, setImportSuccess] = useState(false);
+
 
 
   // Generate initial farm code if none exists
@@ -102,6 +108,163 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       setShowCopySuccess(true);
       setTimeout(() => setShowCopySuccess(false), 2000);
     }
+  };
+
+  // Download CSV Template
+  const downloadHerdTemplate = () => {
+    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'sire', 'dam', 'location', 'notes', 'status'];
+    const sampleData = [
+      ['1234', 'Bella', '2020-03-15', 'Cow', 'Holstein', 'SIRE123', 'DAM456', 'North Pasture', 'Excellent producer', 'Active'],
+      ['5678', '', '2022-06-20', 'Heifer', 'Jersey', '', '', 'South Pasture', '', 'Active'],
+      ['9012', 'Daisy', '2023-09-10', 'Calf', 'Holstein', 'SIRE789', 'DAM123', 'Calf Barn', 'Healthy calf', 'Active']
+    ];
+    
+    let csvContent = headers.join(',') + '\n';
+    sampleData.forEach(row => {
+      csvContent += row.join(',') + '\n';
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'herd-import-template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Parse CSV file
+  const parseCSV = (csvText) => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    const data = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      const row = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index] || '';
+      });
+      data.push(row);
+    }
+    
+    return data;
+  };
+
+  // Validate import data
+  const validateImportData = (data) => {
+    const errors = [];
+    const existingCows = JSON.parse(localStorage.getItem('cattleAppCows') || '[]');
+    const existingTags = new Set(existingCows.map(cow => cow.tagNumber));
+    const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
+    
+    data.forEach((row, index) => {
+      const rowErrors = [];
+      
+      // Required field validation
+      if (!row.tagNumber?.trim()) {
+        rowErrors.push('Tag number is required');
+      }
+      
+      if (!row.dateOfBirth?.trim()) {
+        rowErrors.push('Date of birth is required');
+      } else {
+        // Date format validation
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(row.dateOfBirth)) {
+          rowErrors.push('Date must be in YYYY-MM-DD format');
+        } else {
+          const date = new Date(row.dateOfBirth);
+          if (isNaN(date.getTime())) {
+            rowErrors.push('Invalid date');
+          }
+        }
+      }
+      
+      if (!row.category?.trim()) {
+        rowErrors.push('Category is required');
+      } else if (!validCategories.includes(row.category)) {
+        rowErrors.push(`Category must be one of: ${validCategories.join(', ')}`);
+      }
+      
+      // Duplicate tag number check
+      if (row.tagNumber?.trim() && existingTags.has(row.tagNumber.trim())) {
+        rowErrors.push('Tag number already exists');
+      }
+      
+      if (rowErrors.length > 0) {
+        errors.push({
+          row: index + 2, // +2 because of 0-based index and header row
+          errors: rowErrors
+        });
+      }
+    });
+    
+    return errors;
+  };
+
+  // Handle bulk import file upload
+  const handleBulkImport = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csvText = e.target.result;
+      const parsedData = parseCSV(csvText);
+      const errors = validateImportData(parsedData);
+      
+      setBulkImportData(parsedData);
+      setImportErrors(errors);
+      setShowImportPreview(true);
+    };
+    reader.readAsText(file);
+  };
+
+  // Confirm bulk import
+  const confirmBulkImport = () => {
+    const validData = bulkImportData.filter((_, index) => {
+      return !importErrors.some(error => error.row === index + 2);
+    });
+    
+    if (validData.length === 0) {
+      alert('No valid records to import');
+      return;
+    }
+    
+    // Import valid records
+    const existingCows = JSON.parse(localStorage.getItem('cattleAppCows') || '[]');
+    const newCows = validData.map(row => ({
+      id: Date.now() + Math.random(),
+      tagNumber: row.tagNumber.trim(),
+      name: row.name?.trim() || '',
+      dateOfBirth: row.dateOfBirth.trim(),
+      category: row.category.trim(),
+      breed: row.breed?.trim() || '',
+      sire: row.sire?.trim() || '',
+      dam: row.dam?.trim() || '',
+      location: row.location?.trim() || '',
+      notes: row.notes?.trim() || '',
+      status: row.status?.trim() || 'Active',
+      archived: false,
+      breedingRecords: [],
+      healthRecords: [],
+      calvingRecords: []
+    }));
+    
+    const updatedCows = [...existingCows, ...newCows];
+    localStorage.setItem('cattleAppCows', JSON.stringify(updatedCows));
+    
+    setImportSuccess(true);
+    setShowImportPreview(false);
+    setBulkImportData([]);
+    setImportErrors([]);
+    
+    setTimeout(() => setImportSuccess(false), 3000);
   };
 
   // Farm Settings State
@@ -972,6 +1135,84 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                   </button>
                 </div>
               </div>
+
+              {/* Bulk Herd Import Section */}
+              <div className="border-t border-slate-200 pt-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Bulk Herd Import</h3>
+                <p className="text-slate-600 mb-6">
+                  Import multiple cattle records at once using a CSV file. Download the template below to get started.
+                </p>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Download Template */}
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-6">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <Download className="w-6 h-6 text-orange-600" />
+                      <h4 className="text-lg font-semibold text-orange-900">Download Template</h4>
+                    </div>
+                    <p className="text-orange-700 mb-4">
+                      Download a CSV template with sample data and proper column headers.
+                    </p>
+                    <button
+                      onClick={downloadHerdTemplate}
+                      className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                    >
+                      Download Herd Template
+                    </button>
+                  </div>
+
+                  {/* Upload Herd Data */}
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6">
+                    <div className="flex items-center space-x-3 mb-4">
+                      <Upload className="w-6 h-6 text-indigo-600" />
+                      <h4 className="text-lg font-semibold text-indigo-900">Upload Herd Data</h4>
+                    </div>
+                    <p className="text-indigo-700 mb-4">
+                      Upload your filled CSV file to import multiple cattle records.
+                    </p>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleBulkImport}
+                      className="hidden"
+                      id="bulk-import-file"
+                    />
+                    <label
+                      htmlFor="bulk-import-file"
+                      className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer"
+                    >
+                      Upload Herd Data
+                    </label>
+                  </div>
+                </div>
+
+                {/* Template Instructions */}
+                <div className="bg-slate-50 rounded-xl p-6 mt-6">
+                  <h4 className="font-semibold text-slate-900 mb-3">Template Instructions</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                    <div>
+                      <p className="font-medium mb-2">Required Fields:</p>
+                      <ul className="space-y-1">
+                        <li>• <span className="font-medium">tagNumber</span> - Unique identifier (required)</li>
+                        <li>• <span className="font-medium">dateOfBirth</span> - Format: YYYY-MM-DD (required)</li>
+                        <li>• <span className="font-medium">category</span> - Cow, Heifer, Calf, or Bull (required)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-medium mb-2">Optional Fields:</p>
+                      <ul className="space-y-1">
+                        <li>• <span className="font-medium">name</span> - Animal name</li>
+                        <li>• <span className="font-medium">breed</span> - Animal breed</li>
+                        <li>• <span className="font-medium">sire</span> - Father's ID</li>
+                        <li>• <span className="font-medium">dam</span> - Mother's ID</li>
+                        <li>• <span className="font-medium">location</span> - Current location</li>
+                        <li>• <span className="font-medium">notes</span> - Additional notes</li>
+                        <li>• <span className="font-medium">status</span> - Defaults to "Active"</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1140,6 +1381,144 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                 Regenerate Code
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Preview Modal */}
+      {showImportPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Import Preview</h3>
+                  <p className="text-slate-600 mt-1">
+                    Review your data before importing. {importErrors.length > 0 && (
+                      <span className="text-red-600 font-medium">
+                        {importErrors.length} row(s) have errors and will be skipped.
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowImportPreview(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-auto max-h-[60vh]">
+              {/* Import Summary */}
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-blue-600">{bulkImportData.length}</div>
+                  <div className="text-sm text-blue-700">Total Records</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-green-600">
+                    {bulkImportData.length - importErrors.length}
+                  </div>
+                  <div className="text-sm text-green-700">Valid Records</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-4">
+                  <div className="text-2xl font-bold text-red-600">{importErrors.length}</div>
+                  <div className="text-sm text-red-700">Error Records</div>
+                </div>
+              </div>
+
+              {/* Data Preview Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full border border-slate-200 rounded-lg">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Row</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Tag #</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">DOB</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Category</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Breed</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Status</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-slate-700 border-b">Errors</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bulkImportData.map((row, index) => {
+                      const rowErrors = importErrors.find(error => error.row === index + 2);
+                      const isValid = !rowErrors;
+                      
+                      return (
+                        <tr key={index} className={!isValid ? 'bg-red-50' : ''}>
+                          <td className="px-4 py-3 text-sm border-b">
+                            <span className={`font-medium ${!isValid ? 'text-red-600' : 'text-slate-900'}`}>
+                              {index + 2}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm border-b">{row.tagNumber || '-'}</td>
+                          <td className="px-4 py-3 text-sm border-b">{row.name || '-'}</td>
+                          <td className="px-4 py-3 text-sm border-b">{row.dateOfBirth || '-'}</td>
+                          <td className="px-4 py-3 text-sm border-b">{row.category || '-'}</td>
+                          <td className="px-4 py-3 text-sm border-b">{row.breed || '-'}</td>
+                          <td className="px-4 py-3 text-sm border-b">{row.status || 'Active'}</td>
+                          <td className="px-4 py-3 text-sm border-b">
+                            {rowErrors ? (
+                              <div className="text-red-600 text-xs">
+                                {rowErrors.errors.map((error, i) => (
+                                  <div key={i}>• {error}</div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-green-600 text-xs">✓ Valid</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  {importErrors.length > 0 ? (
+                    <span className="text-red-600">
+                      {importErrors.length} row(s) will be skipped due to errors
+                    </span>
+                  ) : (
+                    <span className="text-green-600">All records are valid and ready to import</span>
+                  )}
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowImportPreview(false)}
+                    className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmBulkImport}
+                    disabled={bulkImportData.length - importErrors.length === 0}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    Import {bulkImportData.length - importErrors.length} Records
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Success Message */}
+      {importSuccess && (
+        <div className="fixed top-4 right-4 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg z-50">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="w-5 h-5 text-green-600" />
+            <span className="text-green-800 font-medium">Herd data imported successfully!</span>
           </div>
         </div>
       )}
