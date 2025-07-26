@@ -62,6 +62,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
   const [bulkImportData, setBulkImportData] = useState([]);
   const [importErrors, setImportErrors] = useState([]);
   const [importSuccess, setImportSuccess] = useState(false);
+  const [showTemplateInstructions, setShowTemplateInstructions] = useState(false);
 
 
 
@@ -110,16 +111,32 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
     }
   };
 
+  // Show template instructions
+  const showTemplateInstructionsModal = () => {
+    setShowTemplateInstructions(true);
+  };
+
   // Download CSV Template
   const downloadHerdTemplate = () => {
-    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'sire', 'dam', 'location', 'notes', 'status'];
-    const sampleData = [
-      ['1234', 'Bella', '2020-03-15', 'Cow', 'Holstein', 'SIRE123', 'DAM456', 'North Pasture', 'Excellent producer', 'Active'],
-      ['5678', '', '2022-06-20', 'Heifer', 'Jersey', '', '', 'South Pasture', '', 'Active'],
-      ['9012', 'Daisy', '2023-09-10', 'Calf', 'Holstein', 'SIRE789', 'DAM123', 'Calf Barn', 'Healthy calf', 'Active']
+    // Instructions as comments to prevent Excel auto-formatting
+    const instructions = [
+      '# IMPORTANT: Date format must be YYYY-MM-DD (example: 1995-03-15)',
+      '# Do not let Excel auto-format dates - keep as text format',
+      '# Category must be: Cow, Heifer, Calf, or Bull',
+      '# Tag numbers must be unique',
+      '# Required fields: tagNumber, dateOfBirth, category',
+      '# Optional fields: name, breed, sire, dam, location, notes, status'
     ];
     
-    let csvContent = headers.join(',') + '\n';
+    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'sire', 'dam', 'location', 'notes', 'status'];
+    const sampleData = [
+      ['001', 'Bella', '1995-03-15', 'Cow', 'Holstein', 'Champion', 'Daisy', 'Barn 1', 'Sample cow', 'Active'],
+      ['002', '', '2020-06-20', 'Heifer', 'Jersey', '', '', 'Pasture A', '', 'Active'],
+      ['003', 'Daisy', '2023-09-10', 'Calf', 'Holstein', 'Bull001', 'Bella', 'Calf Barn', 'Healthy calf', 'Active']
+    ];
+    
+    let csvContent = instructions.join('\n') + '\n';
+    csvContent += headers.join(',') + '\n';
     sampleData.forEach(row => {
       csvContent += row.join(',') + '\n';
     });
@@ -133,11 +150,13 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    setShowTemplateInstructions(false);
   };
 
   // Parse CSV file
   const parseCSV = (csvText) => {
-    const lines = csvText.split('\n').filter(line => line.trim());
+    const lines = csvText.split('\n').filter(line => line.trim() && !line.startsWith('#'));
     if (lines.length < 2) return [];
     
     const headers = lines[0].split(',').map(h => h.trim());
@@ -153,6 +172,39 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
     }
     
     return data;
+  };
+
+  // Convert date to YYYY-MM-DD format
+  const normalizeDate = (dateString) => {
+    if (!dateString) return null;
+    
+    // Remove quotes and trim
+    const cleanDate = dateString.replace(/['"]/g, '').trim();
+    
+    // Already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+      return cleanDate;
+    }
+    
+    // Try MM/DD/YYYY format
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanDate)) {
+      const [month, day, year] = cleanDate.split('/');
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    // Try MM-DD-YYYY format
+    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(cleanDate)) {
+      const [month, day, year] = cleanDate.split('-');
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    // Try DD/MM/YYYY format
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanDate)) {
+      const [day, month, year] = cleanDate.split('/');
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    return null;
   };
 
   // Validate import data
@@ -173,14 +225,18 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       if (!row.dateOfBirth?.trim()) {
         rowErrors.push('Date of birth is required');
       } else {
-        // Date format validation
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(row.dateOfBirth)) {
-          rowErrors.push('Date must be in YYYY-MM-DD format');
+        // Try to normalize the date
+        const normalizedDate = normalizeDate(row.dateOfBirth);
+        if (!normalizedDate) {
+          rowErrors.push(`Date '${row.dateOfBirth}' should be in YYYY-MM-DD format (example: 1995-03-15)`);
         } else {
-          const date = new Date(row.dateOfBirth);
+          // Validate the normalized date
+          const date = new Date(normalizedDate);
           if (isNaN(date.getTime())) {
-            rowErrors.push('Invalid date');
+            rowErrors.push(`Invalid date: ${row.dateOfBirth}`);
+          } else {
+            // Update the row with normalized date
+            row.dateOfBirth = normalizedDate;
           }
         }
       }
@@ -188,12 +244,12 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
       if (!row.category?.trim()) {
         rowErrors.push('Category is required');
       } else if (!validCategories.includes(row.category)) {
-        rowErrors.push(`Category must be one of: ${validCategories.join(', ')}`);
+        rowErrors.push(`Category '${row.category}' must be one of: ${validCategories.join(', ')}`);
       }
       
       // Duplicate tag number check
       if (row.tagNumber?.trim() && existingTags.has(row.tagNumber.trim())) {
-        rowErrors.push('Tag number already exists');
+        rowErrors.push(`Tag number '${row.tagNumber}' already exists in your herd`);
       }
       
       if (rowErrors.length > 0) {
@@ -1154,7 +1210,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
                       Download a CSV template with sample data and proper column headers.
                     </p>
                     <button
-                      onClick={downloadHerdTemplate}
+                      onClick={showTemplateInstructionsModal}
                       className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
                     >
                       Download Herd Template
@@ -1519,6 +1575,145 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
           <div className="flex items-center space-x-2">
             <CheckCircle className="w-5 h-5 text-green-600" />
             <span className="text-green-800 font-medium">Herd data imported successfully!</span>
+          </div>
+        </div>
+      )}
+
+      {/* Template Instructions Modal */}
+      {showTemplateInstructions && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">Template Instructions</h3>
+                  <p className="text-slate-600 mt-1">
+                    Important formatting rules for your CSV template
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowTemplateInstructions(false)}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-auto max-h-[60vh]">
+              <div className="space-y-6">
+                {/* Date Format Section */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-red-900 mb-2">⚠️ Critical: Date Format</h4>
+                      <p className="text-red-800 text-sm mb-2">
+                        <strong>Date of Birth must be in YYYY-MM-DD format</strong>
+                      </p>
+                      <div className="bg-white rounded p-3 text-sm">
+                        <p className="font-medium mb-1">✅ Correct format examples:</p>
+                        <ul className="space-y-1 text-green-700">
+                          <li>• 1995-03-15 (March 15, 1995)</li>
+                          <li>• 2020-06-20 (June 20, 2020)</li>
+                          <li>• 2023-09-10 (September 10, 2023)</li>
+                        </ul>
+                        <p className="font-medium mb-1 mt-3 text-red-700">❌ Incorrect formats:</p>
+                        <ul className="space-y-1 text-red-700">
+                          <li>• 03/15/1995 (Excel default)</li>
+                          <li>• 15/03/1995 (European format)</li>
+                          <li>• 3/15/95 (Short format)</li>
+                        </ul>
+                      </div>
+                      <p className="text-red-800 text-sm mt-3">
+                        <strong>Important:</strong> When opening in Excel, make sure to keep the date column as text format. 
+                        Do not let Excel auto-format the dates!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Required Fields */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 mb-3">📋 Required Fields</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="font-medium text-blue-800 mb-2">Must be filled:</p>
+                      <ul className="space-y-1 text-blue-700">
+                        <li>• <strong>tagNumber</strong> - Unique identifier</li>
+                        <li>• <strong>dateOfBirth</strong> - YYYY-MM-DD format</li>
+                        <li>• <strong>category</strong> - Animal type</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-medium text-blue-800 mb-2">Category options:</p>
+                      <ul className="space-y-1 text-blue-700">
+                        <li>• <strong>Cow</strong> - Adult female</li>
+                        <li>• <strong>Heifer</strong> - Young female</li>
+                        <li>• <strong>Calf</strong> - Young animal</li>
+                        <li>• <strong>Bull</strong> - Male animal</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Optional Fields */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-green-900 mb-3">📝 Optional Fields</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <ul className="space-y-1 text-green-700">
+                        <li>• <strong>name</strong> - Animal name</li>
+                        <li>• <strong>breed</strong> - Animal breed</li>
+                        <li>• <strong>sire</strong> - Father's ID</li>
+                        <li>• <strong>dam</strong> - Mother's ID</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <ul className="space-y-1 text-green-700">
+                        <li>• <strong>location</strong> - Current location</li>
+                        <li>• <strong>notes</strong> - Additional notes</li>
+                        <li>• <strong>status</strong> - Defaults to "Active"</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tips */}
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-yellow-900 mb-3">💡 Tips for Success</h4>
+                  <ul className="space-y-2 text-sm text-yellow-800">
+                    <li>• <strong>Use Excel/Google Sheets</strong> to fill out the template</li>
+                    <li>• <strong>Set date column to text format</strong> before entering dates</li>
+                    <li>• <strong>Use unique tag numbers</strong> for each animal</li>
+                    <li>• <strong>Save as CSV format</strong> when finished</li>
+                    <li>• <strong>Review your data</strong> before uploading</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Ready to download the template with these instructions?
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowTemplateInstructions(false)}
+                    className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={downloadHerdTemplate}
+                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Download Template
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
