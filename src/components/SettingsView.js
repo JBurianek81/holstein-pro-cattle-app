@@ -29,7 +29,7 @@ import {
   X
 } from 'lucide-react';
 
-const SettingsView = () => {
+const SettingsView = ({ profileData: initialProfileData, onProfileUpdate }) => {
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -37,7 +37,7 @@ const SettingsView = () => {
   const [showImportSuccess, setShowImportSuccess] = useState(false);
 
   // User Profile State
-  const [profileData, setProfileData] = useState({
+  const [profileData, setProfileData] = useState(initialProfileData || {
     farmName: 'Holstein Pro Farm',
     ownerName: 'Jason Burianek',
     farmAddress: '123 Dairy Lane, Farmville, CA 90210',
@@ -111,6 +111,13 @@ const SettingsView = () => {
     }
   }, []);
 
+  // Update local profileData when prop changes
+  useEffect(() => {
+    if (initialProfileData) {
+      setProfileData(initialProfileData);
+    }
+  }, [initialProfileData]);
+
   // Save settings to localStorage
   const saveSettings = () => {
     const settings = {
@@ -120,6 +127,12 @@ const SettingsView = () => {
       app: appPreferences
     };
     localStorage.setItem('holsteinProSettings', JSON.stringify(settings));
+    
+    // Update parent component's profile data
+    if (onProfileUpdate) {
+      onProfileUpdate(profileData);
+    }
+    
     setIsLoading(true);
     setTimeout(() => setIsLoading(false), 1000);
   };

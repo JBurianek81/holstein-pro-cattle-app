@@ -20,6 +20,7 @@ import {
   X
 } from 'lucide-react';
 import { calculateReproductiveStatus, createHealthRecord, createHeatRecord } from '../utils/cowDataModel';
+import BreedingRecordModal from './BreedingRecordModal';
 
 const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpdateBullInventory }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +45,10 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
   const [showPregnancyCheckDialog, setShowPregnancyCheckDialog] = useState(false);
   const [pregnancyCheckCow, setPregnancyCheckCow] = useState(null);
   const [pregnancyCheckAction, setPregnancyCheckAction] = useState(null); // 'pregnant' or 'open'
+
+  // Breeding record modal state
+  const [showBreedingModal, setShowBreedingModal] = useState(false);
+  const [selectedCowForBreeding, setSelectedCowForBreeding] = useState(null);
 
   // Get today's date string
   const today = new Date().toISOString().split('T')[0];
@@ -457,6 +462,74 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
     setPregnancyCheckAction(null);
   };
 
+  // Handle Record Breeding button click
+  const handleRecordBreeding = () => {
+    setShowBreedingModal(true);
+  };
+
+  // Handle breeding modal close
+  const handleCloseBreedingModal = () => {
+    setShowBreedingModal(false);
+    setSelectedCowForBreeding(null);
+  };
+
+  // Handle breeding record save - integrates with existing system
+  const handleBreedingRecordSave = (selectedCow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
+    console.log('🐄 BreedingCenter: handleBreedingRecordSave called with:', {
+      cow: selectedCow.name,
+      breedingRecord,
+      selectedBullId,
+      isEditing,
+      oldBreedingRecord
+    });
+
+    // Update the cow's breeding records
+    const updatedCow = {
+      ...selectedCow,
+      breedingRecords: isEditing
+        ? selectedCow.breedingRecords.map(record => 
+            record.id === breedingRecord.id ? breedingRecord : record
+          )
+        : [...(selectedCow.breedingRecords || []), breedingRecord]
+    };
+
+    // Update the cow in the parent component
+    onUpdateCow(updatedCow);
+
+    // Update bull inventory (straw count reduction)
+    const updatedBullInventory = bullInventory.map(bull => {
+      if (bull.naabCode === selectedBullId) {
+        if (isEditing && oldBreedingRecord) {
+          // Handle editing: restore old bull's straw count and reduce new bull's count
+          if (oldBreedingRecord.semenId !== selectedBullId) {
+            // Different bull selected - restore old bull and reduce new bull
+            const oldBull = bullInventory.find(b => b.naabCode === oldBreedingRecord.semenId);
+            if (oldBull) {
+              oldBull.straws = Math.max(0, oldBull.straws + 1);
+            }
+            return { ...bull, straws: Math.max(0, bull.straws - 1) };
+          }
+          // Same bull - no change needed
+          return bull;
+        } else {
+          // New breeding record - reduce straw count by 1
+          return { ...bull, straws: Math.max(0, bull.straws - 1) };
+        }
+      }
+      return bull;
+    });
+
+    // Update bull inventory in parent component
+    onUpdateBullInventory(updatedBullInventory);
+
+    console.log('✅ Breeding record saved and inventory updated');
+  };
+
+  // Helper function to display cow name gracefully
+  const getDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -467,7 +540,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
             Manage breeding programs and track reproductive status
           </p>
         </div>
-        <button className="bg-gradient-to-r from-pink-600 to-red-600 text-white px-6 py-3 rounded-xl hover:from-pink-700 hover:to-red-700 transition-all duration-200 font-medium flex items-center space-x-2 shadow-lg hover:shadow-xl">
+        <button className="bg-gradient-to-r from-pink-600 to-red-600 text-white px-6 py-3 rounded-xl hover:from-pink-700 hover:to-red-700 transition-all duration-200 font-medium flex items-center space-x-2 shadow-lg hover:shadow-xl" onClick={handleRecordBreeding}>
           <Plus className="w-5 h-5" />
           <span>Record Breeding</span>
         </button>
@@ -635,7 +708,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                                 onClick={() => onViewProfile(cow)}
                                 className="text-sm font-medium text-slate-900 hover:text-blue-600 transition-colors text-left"
                               >
-                                {cow.name}
+                                {getDisplayName(cow)}
                               </button>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -744,8 +817,8 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                         <div key={cow.id} className="bg-white rounded-lg p-3 border border-red-200">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium text-slate-900">{cow.name}</p>
-                              <p className="text-sm text-slate-600">{cow.tagNumber}</p>
+                              <p className="font-medium text-slate-900">{getDisplayName(cow)}</p>
+                              {cow.name?.trim() && <p className="text-sm text-slate-600">{cow.tagNumber}</p>}
                               <p className="text-xs text-slate-500">{calculateAgeInMonths(cow.dateOfBirth)} months old</p>
                             </div>
                             <button
@@ -773,8 +846,8 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                         <div key={cow.id} className="bg-white rounded-lg p-3 border border-orange-200">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium text-slate-900">{cow.name}</p>
-                              <p className="text-sm text-slate-600">{cow.tagNumber}</p>
+                              <p className="font-medium text-slate-900">{getDisplayName(cow)}</p>
+                              {cow.name?.trim() && <p className="text-sm text-slate-600">{cow.tagNumber}</p>}
                               <p className="text-xs text-slate-500">{calculateAgeInMonths(cow.dateOfBirth)} months old</p>
                             </div>
                             <button
@@ -911,9 +984,9 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                                   ? 'bg-orange-100 text-orange-700 border border-orange-200'
                                   : 'bg-slate-100 text-slate-700 border border-slate-200'
                               }`}
-                              title={`${event.cow.name} - ${getHeatEventTypeLabel(event.type)}`}
+                              title={`${getDisplayName(event.cow)} - ${getHeatEventTypeLabel(event.type)}`}
                             >
-                              {event.cow.name}
+                              {getDisplayName(event.cow)}
                             </div>
                           ))}
                           {events.length > 3 && (
@@ -965,7 +1038,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                               }`}></div>
                               <div className="flex-1">
                                 <div className="flex items-center justify-between">
-                                  <h4 className="font-medium text-slate-900">{event.cow.name}</h4>
+                                  <h4 className="font-medium text-slate-900">{getDisplayName(event.cow)}</h4>
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                     event.type === 'heat' ? 'bg-red-100 text-red-700'
                                     : event.type === 'predicted_heat' ? 'bg-orange-100 text-orange-700'
@@ -1069,8 +1142,24 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
         </div>
       </div>
 
+      {/* Breeding Record Modal */}
+      <BreedingRecordModal
+        isOpen={showBreedingModal}
+        onClose={handleCloseBreedingModal}
+        cows={cows}
+        bullInventory={bullInventory}
+        onSave={handleBreedingRecordSave}
+        selectedCow={selectedCowForBreeding}
+        editingRecord={null}
+      />
+
       {/* Bull Inventory Modal */}
-      <BullInventoryModal isOpen={showBullModal} onClose={handleCloseBullModal} onSave={handleSaveBull} editingBull={editingBull} />
+      <BullInventoryModal
+        isOpen={showBullModal}
+        onClose={handleCloseBullModal}
+        onSave={handleSaveBull}
+        editingBull={editingBull}
+      />
 
       {/* Pregnancy Check Confirmation Dialog */}
       {showPregnancyCheckDialog && pregnancyCheckCow && (
@@ -1088,7 +1177,7 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
                 Confirm Pregnancy Check
               </h3>
               <p className="text-slate-600 mb-6">
-                Mark <span className="font-medium">{pregnancyCheckCow.name}</span> as{' '}
+                Mark <span className="font-medium">{getDisplayName(pregnancyCheckCow)}</span> as{' '}
                 <span className={`font-medium ${pregnancyCheckAction === 'pregnant' ? 'text-green-600' : 'text-red-600'}`}>
                   {pregnancyCheckAction === 'pregnant' ? 'Pregnant' : 'Open'}
                 </span>?

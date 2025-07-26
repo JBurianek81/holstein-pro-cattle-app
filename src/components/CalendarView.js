@@ -10,9 +10,14 @@ import { calculateReproductiveStatus } from '../utils/cowDataModel';
 
 const CalendarView = ({ cows }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('month'); // month, week, day
-  const [eventFilter, setEventFilter] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all');
+
+  // Helper function to display cow name gracefully
+  const getDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
 
   // Generate calendar data
   const getCalendarData = () => {
@@ -50,7 +55,7 @@ const CalendarView = ({ cows }) => {
           events.push({
             id: `heat-${cow.id}-${heatRecords[0].id}`,
             type: 'heat',
-            title: `${cow.name} - Heat Detection`,
+            title: `${getDisplayName(cow)} - Heat Detection`,
             description: 'Confirmed heat detection',
             cow: cow,
             date: new Date(heatRecords[0].date),
@@ -71,7 +76,7 @@ const CalendarView = ({ cows }) => {
             events.push({
               id: `predicted-heat-${cow.id}`,
               type: 'predicted_heat',
-              title: `${cow.name} - Predicted Heat`,
+              title: `${getDisplayName(cow)} - Predicted Heat`,
               description: 'Predicted heat date (21-day cycle)',
               cow: cow,
               date: predictedHeat,
@@ -91,7 +96,7 @@ const CalendarView = ({ cows }) => {
           events.push({
             id: `breeding-${cow.id}-${breedingRecords[0].id}`,
             type: 'breeding',
-            title: `${cow.name} - Breeding`,
+                          title: `${getDisplayName(cow)} - Breeding`,
             description: `Bred with ${breedingRecords[0].bullName || 'Unknown Bull'}`,
             cow: cow,
             date: new Date(breedingRecords[0].date),
@@ -109,7 +114,7 @@ const CalendarView = ({ cows }) => {
             events.push({
               id: `due-date-${cow.id}-${mostRecentBreeding.id}`,
               type: 'due_date',
-              title: `${cow.name} - Due Date`,
+              title: `${getDisplayName(cow)} - Due Date`,
               description: 'Expected calving date',
               cow: cow,
               date: new Date(mostRecentBreeding.expectedDueDate),
@@ -129,7 +134,7 @@ const CalendarView = ({ cows }) => {
           events.push({
             id: `calving-${cow.id}-${calvingRecords[0].id}`,
             type: 'calving',
-            title: `${cow.name} - Calved`,
+                          title: `${getDisplayName(cow)} - Calved`,
             description: `Calved ${calvingRecords[0].calfTag || 'Unknown'} (${calvingRecords[0].calfGender || 'Unknown'})`,
             cow: cow,
             date: new Date(calvingRecords[0].date),
@@ -148,7 +153,7 @@ const CalendarView = ({ cows }) => {
           events.push({
             id: `health-${cow.id}-${health.id}`,
             type: 'health',
-            title: `${cow.name} - ${health.type}`,
+            title: `${getDisplayName(cow)} - ${health.type}`,
             description: health.description || health.type,
             cow: cow,
             date: new Date(health.date),
@@ -163,8 +168,8 @@ const CalendarView = ({ cows }) => {
 
   // Filter events based on selected filter
   const getFilteredEvents = (events) => {
-    if (eventFilter === 'all') return events;
-    return events.filter(event => event.type === eventFilter);
+    if (activeFilter === 'all') return events;
+    return events.filter(event => event.type === activeFilter);
   };
 
   // Get event styling
@@ -257,34 +262,74 @@ const CalendarView = ({ cows }) => {
           {/* View Mode */}
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setViewMode('month')}
+              onClick={() => setActiveFilter('all')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'month' 
+                activeFilter === 'all' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Month
+              All Events
             </button>
             <button
-              onClick={() => setViewMode('week')}
+              onClick={() => setActiveFilter('heat')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'week' 
+                activeFilter === 'heat' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Week
+              Heat Detection
             </button>
             <button
-              onClick={() => setViewMode('day')}
+              onClick={() => setActiveFilter('predicted_heat')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'day' 
+                activeFilter === 'predicted_heat' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              Day
+              Predicted Heat
+            </button>
+            <button
+              onClick={() => setActiveFilter('breeding')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeFilter === 'breeding' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Breeding
+            </button>
+            <button
+              onClick={() => setActiveFilter('due_date')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeFilter === 'due_date' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Due Dates
+            </button>
+            <button
+              onClick={() => setActiveFilter('calving')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeFilter === 'calving' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Calving
+            </button>
+            <button
+              onClick={() => setActiveFilter('health')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeFilter === 'health' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              Health
             </button>
           </div>
         </div>
@@ -293,8 +338,8 @@ const CalendarView = ({ cows }) => {
         <div className="flex items-center space-x-4">
           <Filter className="w-4 h-4 text-slate-400" />
           <select
-            value={eventFilter}
-            onChange={(e) => setEventFilter(e.target.value)}
+            value={activeFilter}
+            onChange={(e) => setActiveFilter(e.target.value)}
             className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">All Events</option>
@@ -324,7 +369,7 @@ const CalendarView = ({ cows }) => {
           {calendarData.map((date, index) => {
             const isCurrentMonth = date.getMonth() === currentDate.getMonth();
             const isToday = date.toDateString() === new Date().toDateString();
-            const isSelected = date.toDateString() === selectedDate.toDateString();
+            const isSelected = date.toDateString() === selectedDate?.toDateString();
             const events = getFilteredEvents(getEventsForDate(date));
             
             return (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive, Activity } from 'lucide-react';
+import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive, Activity, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc } from 'lucide-react';
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge, calculateHealthScore, getHealthScoreBadge } from '../utils/cowDataModel';
 
 const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile, onArchiveCow }) => {
@@ -9,42 +9,193 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [showArchiveConfirm, setShowArchiveConfirm] = React.useState(false);
   const [archiveReason, setArchiveReason] = React.useState('');
+  
+  // Advanced filter states
+  const [showFilterPanel, setShowFilterPanel] = React.useState(false);
+  const [sortBy, setSortBy] = React.useState('name');
+  const [sortDirection, setSortDirection] = React.useState('asc');
+  const [selectedBreeds, setSelectedBreeds] = React.useState([]);
+  const [selectedStatuses, setSelectedStatuses] = React.useState([]);
+  const [selectedLocations, setSelectedLocations] = React.useState([]);
+  const [healthScoreRange, setHealthScoreRange] = React.useState([0, 100]);
+  const [healthStatusFilters, setHealthStatusFilters] = React.useState({
+    atRisk: false,
+    needsAttention: false,
+    healthy: false
+  });
+  const [recentActivityOnly, setRecentActivityOnly] = React.useState(false);
 
-  // Filter cows based on search and active filter (exclude archived cows)
-  const filteredCows = cows.filter(cow => {
-    // Exclude archived cows from main herd view
-    if (cow.archived === true) return false;
+  // Get unique values for filter options
+  const getUniqueBreeds = () => {
+    const breeds = cows.filter(cow => !cow.archived).map(cow => cow.breed);
+    return [...new Set(breeds)].filter(Boolean).sort();
+  };
+
+  const getUniqueLocations = () => {
+    const locations = cows.filter(cow => !cow.archived).map(cow => cow.location);
+    return [...new Set(locations)].filter(Boolean).sort();
+  };
+
+  const getUniqueStatuses = () => {
+    const statuses = cows.filter(cow => !cow.archived).map(cow => cow.status);
+    return [...new Set(statuses)].filter(Boolean).sort();
+  };
+
+  // Count active filters
+  const getActiveFilterCount = () => {
+    let count = 0;
+    if (selectedBreeds.length > 0) count++;
+    if (selectedStatuses.length > 0) count++;
+    if (selectedLocations.length > 0) count++;
+    if (healthScoreRange[0] > 0 || healthScoreRange[1] < 100) count++;
+    if (Object.values(healthStatusFilters).some(Boolean)) count++;
+    if (recentActivityOnly) count++;
+    return count;
+  };
+
+  // Get health status for filtering
+  const getHealthStatus = (cow) => {
+    const healthScore = calculateHealthScore(cow);
+    if (healthScore < 60) return 'atRisk';
+    if (healthScore < 80) return 'needsAttention';
+    return 'healthy';
+  };
+
+  // Check if cow has recent activity (within last 30 days)
+  const hasRecentActivity = (cow) => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     
-    const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
+    const allRecords = [
+      ...(cow.healthRecords || []),
+      ...(cow.breedingRecords || []),
+      ...(cow.calvingRecords || [])
+    ];
     
-    let matchesFilter = true;
-    switch (activeFilter) {
-      case 'cows':
-        matchesFilter = cow.category === 'Cow';
-        break;
-      case 'heifers':
-        matchesFilter = cow.category === 'Heifer';
-        break;
-      case 'calves':
-        matchesFilter = cow.category === 'Calf';
-        break;
-      case 'bulls':
-        matchesFilter = cow.category === 'Bull';
-        break;
-      case 'dry':
-        matchesFilter = cow.productionStatus === 'Dry';
-        break;
-      case 'all':
-      case null:
-      default:
-        matchesFilter = true;
-        break;
+    return allRecords.some(record => new Date(record.date) > thirtyDaysAgo);
+  };
+
+  // Apply advanced filters
+  const applyAdvancedFilters = (cow) => {
+    // Breed filter
+    if (selectedBreeds.length > 0 && !selectedBreeds.includes(cow.breed)) {
+      return false;
     }
     
-    return matchesSearch && matchesFilter;
-  });
+    // Status filter
+    if (selectedStatuses.length > 0 && !selectedStatuses.includes(cow.status)) {
+      return false;
+    }
+    
+    // Location filter
+    if (selectedLocations.length > 0 && !selectedLocations.includes(cow.location)) {
+      return false;
+    }
+    
+    // Health score range filter
+    const healthScore = calculateHealthScore(cow);
+    if (healthScore < healthScoreRange[0] || healthScore > healthScoreRange[1]) {
+      return false;
+    }
+    
+    // Health status filter
+    const cowHealthStatus = getHealthStatus(cow);
+    if (Object.values(healthStatusFilters).some(Boolean) && !healthStatusFilters[cowHealthStatus]) {
+      return false;
+    }
+    
+    // Recent activity filter
+    if (recentActivityOnly && !hasRecentActivity(cow)) {
+      return false;
+    }
+    
+    return true;
+  };
+
+  // Sort cows
+  const sortCows = (cowsToSort) => {
+    return cowsToSort.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'tagNumber':
+          aValue = a.tagNumber.toLowerCase();
+          bValue = b.tagNumber.toLowerCase();
+          break;
+        case 'age':
+          aValue = new Date(a.dateOfBirth || 0);
+          bValue = new Date(b.dateOfBirth || 0);
+          break;
+        case 'healthScore':
+          aValue = calculateHealthScore(a);
+          bValue = calculateHealthScore(b);
+          break;
+        case 'lastUpdated':
+          const aRecords = [...(a.healthRecords || []), ...(a.breedingRecords || []), ...(a.calvingRecords || [])];
+          const bRecords = [...(b.healthRecords || []), ...(b.breedingRecords || []), ...(b.calvingRecords || [])];
+          aValue = aRecords.length > 0 ? Math.max(...aRecords.map(r => new Date(r.date))) : new Date(0);
+          bValue = bRecords.length > 0 ? Math.max(...bRecords.map(r => new Date(r.date))) : new Date(0);
+          break;
+        default:
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+      }
+      
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  };
+
+  // Filter cows based on search and active filter (exclude archived cows)
+  const filteredCows = React.useMemo(() => {
+    let filtered = cows.filter(cow => {
+      // Exclude archived cows from main herd view
+      if (cow.archived === true) return false;
+      
+      const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      let matchesFilter = true;
+      switch (activeFilter) {
+        case 'cows':
+          matchesFilter = cow.category === 'Cow';
+          break;
+        case 'heifers':
+          matchesFilter = cow.category === 'Heifer';
+          break;
+        case 'calves':
+          matchesFilter = cow.category === 'Calf';
+          break;
+        case 'bulls':
+          matchesFilter = cow.category === 'Bull';
+          break;
+        case 'dry':
+          matchesFilter = cow.productionStatus === 'Dry';
+          break;
+        case 'all':
+        case null:
+        default:
+          matchesFilter = true;
+          break;
+      }
+      
+      return matchesSearch && matchesFilter;
+    });
+
+    // Apply advanced filters
+    filtered = filtered.filter(applyAdvancedFilters);
+    
+    // Sort the filtered results
+    return sortCows(filtered);
+  }, [cows, searchTerm, activeFilter, selectedBreeds, selectedStatuses, selectedLocations, healthScoreRange, healthStatusFilters, recentActivityOnly, sortBy, sortDirection]);
 
   // Calculate age from date of birth
   const calculateAge = (dateOfBirth) => {
@@ -160,6 +311,33 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
     setArchiveReason('');
   };
 
+  // Clear all filters
+  const clearAllFilters = () => {
+    setSelectedBreeds([]);
+    setSelectedStatuses([]);
+    setSelectedLocations([]);
+    setHealthScoreRange([0, 100]);
+    setHealthStatusFilters({
+      atRisk: false,
+      needsAttention: false,
+      healthy: false
+    });
+    setRecentActivityOnly(false);
+  };
+
+  // Helper function to display cow name gracefully
+  const getDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
+
+  // Helper function to display cow name with tag number
+  const getDisplayNameWithTag = (cow) => {
+    if (cow.name?.trim()) {
+      return `${cow.name} (#${cow.tagNumber})`;
+    }
+    return `#${cow.tagNumber}`;
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -191,6 +369,311 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
             className="pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
           />
         </div>
+      </div>
+
+      {/* Advanced Filter Panel */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        {/* Filter Panel Header */}
+        <div 
+          className="p-6 cursor-pointer hover:bg-slate-50 transition-colors"
+          onClick={() => setShowFilterPanel(!showFilterPanel)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Filter className="w-5 h-5 text-slate-600" />
+              <h3 className="text-lg font-semibold text-slate-900">Filters & Sorting</h3>
+              {getActiveFilterCount() > 0 && (
+                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-sm font-medium">
+                  {getActiveFilterCount()} filter{getActiveFilterCount() !== 1 ? 's' : ''} active
+                </span>
+              )}
+            </div>
+            {showFilterPanel ? (
+              <ChevronUp className="w-5 h-5 text-slate-600" />
+            ) : (
+              <ChevronDown className="w-5 h-5 text-slate-600" />
+            )}
+          </div>
+        </div>
+
+        {/* Filter Panel Content */}
+        {showFilterPanel && (
+          <div className="border-t border-slate-100 p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Column 1: Search & Sort */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-slate-900">Search & Sort</h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Sort by</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="name">Name</option>
+                    <option value="tagNumber">Tag #</option>
+                    <option value="age">Age</option>
+                    <option value="healthScore">Health Score</option>
+                    <option value="lastUpdated">Last Updated</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Sort Direction</label>
+                  <button
+                    onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                    className="flex items-center space-x-2 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    {sortDirection === 'asc' ? (
+                      <SortAsc className="w-4 h-4" />
+                    ) : (
+                      <SortDesc className="w-4 h-4" />
+                    )}
+                    <span className="text-sm font-medium">
+                      {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Column 2: Category Filters */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-slate-900">Category Filters</h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Breed</label>
+                  <select
+                    multiple
+                    value={selectedBreeds}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions, option => option.value);
+                      setSelectedBreeds(values);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[80px]"
+                  >
+                    {getUniqueBreeds().map(breed => (
+                      <option key={breed} value={breed}>{breed}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
+                  <select
+                    multiple
+                    value={selectedStatuses}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions, option => option.value);
+                      setSelectedStatuses(values);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[80px]"
+                  >
+                    {getUniqueStatuses().map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Location</label>
+                  <select
+                    multiple
+                    value={selectedLocations}
+                    onChange={(e) => {
+                      const values = Array.from(e.target.selectedOptions, option => option.value);
+                      setSelectedLocations(values);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[80px]"
+                  >
+                    {getUniqueLocations().map(location => (
+                      <option key={location} value={location}>{location}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Column 3: Health & Performance */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-slate-900">Health & Performance</h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Health Score Range: {healthScoreRange[0]}% - {healthScoreRange[1]}%
+                  </label>
+                  <div className="space-y-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={healthScoreRange[0]}
+                      onChange={(e) => setHealthScoreRange([parseInt(e.target.value), healthScoreRange[1]])}
+                      className="w-full"
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={healthScoreRange[1]}
+                      onChange={(e) => setHealthScoreRange([healthScoreRange[0], parseInt(e.target.value)])}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Health Status</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={healthStatusFilters.atRisk}
+                        onChange={(e) => setHealthStatusFilters(prev => ({ ...prev, atRisk: e.target.checked }))}
+                        className="rounded border-slate-300 text-red-600 focus:ring-red-500"
+                      />
+                      <span className="text-sm text-red-700">At Risk (&lt;60%)</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={healthStatusFilters.needsAttention}
+                        onChange={(e) => setHealthStatusFilters(prev => ({ ...prev, needsAttention: e.target.checked }))}
+                        className="rounded border-slate-300 text-yellow-600 focus:ring-yellow-500"
+                      />
+                      <span className="text-sm text-yellow-700">Needs Attention (60-80%)</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={healthStatusFilters.healthy}
+                        onChange={(e) => setHealthStatusFilters(prev => ({ ...prev, healthy: e.target.checked }))}
+                        className="rounded border-slate-300 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-green-700">Healthy (&gt;80%)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={recentActivityOnly}
+                      onChange={(e) => setRecentActivityOnly(e.target.checked)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Recent Activity Only (last 30 days)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-between mt-6 pt-6 border-t border-slate-100">
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={clearAllFilters}
+                  className="px-4 py-2 text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  Clear All
+                </button>
+                <button
+                  className="px-4 py-2 text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+                >
+                  Save Filter Set
+                </button>
+              </div>
+              <button
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                Apply Filters
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Active Filters Display */}
+      {getActiveFilterCount() > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedBreeds.map(breed => (
+            <span key={breed} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
+              {breed}
+              <button
+                onClick={() => setSelectedBreeds(prev => prev.filter(b => b !== breed))}
+                className="ml-2 hover:text-blue-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {selectedStatuses.map(status => (
+            <span key={status} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-green-100 text-green-700">
+              {status}
+              <button
+                onClick={() => setSelectedStatuses(prev => prev.filter(s => s !== status))}
+                className="ml-2 hover:text-green-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {selectedLocations.map(location => (
+            <span key={location} className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-700">
+              {location}
+              <button
+                onClick={() => setSelectedLocations(prev => prev.filter(l => l !== location))}
+                className="ml-2 hover:text-purple-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          {(healthScoreRange[0] > 0 || healthScoreRange[1] < 100) && (
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-orange-100 text-orange-700">
+              Health Score: {healthScoreRange[0]}-{healthScoreRange[1]}%
+              <button
+                onClick={() => setHealthScoreRange([0, 100])}
+                className="ml-2 hover:text-orange-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {Object.entries(healthStatusFilters).map(([key, value]) => {
+            if (!value) return null;
+            const labels = { atRisk: 'At Risk', needsAttention: 'Needs Attention', healthy: 'Healthy' };
+            const colors = { atRisk: 'red', needsAttention: 'yellow', healthy: 'green' };
+            return (
+              <span key={key} className={`inline-flex items-center px-3 py-1 rounded-full text-sm bg-${colors[key]}-100 text-${colors[key]}-700`}>
+                {labels[key]}
+                <button
+                  onClick={() => setHealthStatusFilters(prev => ({ ...prev, [key]: false }))}
+                  className={`ml-2 hover:text-${colors[key]}-900`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            );
+          })}
+          {recentActivityOnly && (
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-700">
+              Recent Activity Only
+              <button
+                onClick={() => setRecentActivityOnly(false)}
+                className="ml-2 hover:text-indigo-900"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Results Summary */}
+      <div className="text-sm text-slate-600">
+        Showing {filteredCows.length} of {cows.filter(cow => !cow.archived).length} animals
       </div>
 
       {/* Bulk Action Toolbar */}
@@ -372,9 +855,8 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
                             onClick={() => onViewProfile(cow)}
                             className="font-semibold text-slate-900 hover:text-blue-600 transition-colors text-left"
                           >
-                            {cow.name}
+                            {getDisplayName(cow)}
                           </button>
-                          <div className="text-sm text-slate-500">#{cow.tagNumber}</div>
                         </div>
                       </div>
                     </td>
@@ -496,7 +978,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
               <div className="max-h-20 overflow-y-auto">
                 {cows.filter(cow => selectedCows.has(cow.id)).map(cow => (
                   <p key={cow.id} className="text-sm text-orange-600">
-                    {cow.name} (#{cow.tagNumber})
+                    {getDisplayNameWithTag(cow)}
                   </p>
                 ))}
               </div>
@@ -543,7 +1025,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
               <div className="max-h-20 overflow-y-auto">
                 {cows.filter(cow => selectedCows.has(cow.id)).map(cow => (
                   <p key={cow.id} className="text-sm text-red-600">
-                    {cow.name} (#{cow.tagNumber})
+                    {getDisplayNameWithTag(cow)}
                   </p>
                 ))}
               </div>

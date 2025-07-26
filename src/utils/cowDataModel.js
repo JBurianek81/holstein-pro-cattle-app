@@ -157,9 +157,7 @@ export const validateCowData = (cowData) => {
     errors.tagNumber = 'Tag number is required';
   }
 
-  if (!cowData.name?.trim()) {
-    errors.name = 'Name is required';
-  }
+  // Name is now optional - removed validation
 
   if (!cowData.dateOfBirth) {
     errors.dateOfBirth = 'Date of birth is required';

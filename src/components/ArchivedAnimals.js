@@ -1,53 +1,41 @@
 import React from 'react';
 import { Users, Search, RotateCcw, Trash2, MoreVertical, Tag, Calendar, Download, X } from 'lucide-react';
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge } from '../utils/cowDataModel';
+import { useState } from 'react';
 
-const ArchivedAnimals = ({ cows, onRestoreCow, onPermanentlyDeleteCow, onViewProfile }) => {
-  const [searchTerm, setSearchTerm] = React.useState('');
-  const [activeFilter, setActiveFilter] = React.useState('all');
-  const [selectedCows, setSelectedCows] = React.useState(new Set());
-  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+const ArchivedAnimals = ({ archivedCows, onRestoreCow, onPermanentlyDeleteCow, onViewProfile }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [selectedCows, setSelectedCows] = useState(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [cowToDelete, setCowToDelete] = useState(null);
 
-  // Filter to show only archived cows
-  const archivedCows = cows.filter(cow => cow.archived === true);
+  // Helper function to display cow name gracefully
+  const getDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
+
+  // Helper function to display cow name with tag number
+  const getDisplayNameWithTag = (cow) => {
+    if (cow.name?.trim()) {
+      return `${cow.name} (#{cow.tagNumber})`;
+    }
+    return `#${cow.tagNumber}`;
+  };
 
   // Filter archived cows based on search and active filter
   const filteredCows = archivedCows.filter(cow => {
     const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.breed.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.archiveReason.toLowerCase().includes(searchTerm.toLowerCase());
+                         cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
     
     let matchesFilter = true;
     switch (activeFilter) {
-      case 'cows':
-        matchesFilter = cow.category === 'Cow';
-        break;
-      case 'heifers':
-        matchesFilter = cow.category === 'Heifer';
-        break;
-      case 'calves':
-        matchesFilter = cow.category === 'Calf';
-        break;
-      case 'bulls':
-        matchesFilter = cow.category === 'Bull';
-        break;
-      case 'sold':
-        matchesFilter = cow.archiveReason.toLowerCase().includes('sold');
-        break;
-      case 'deceased':
-        matchesFilter = cow.archiveReason.toLowerCase().includes('deceased') || 
-                       cow.archiveReason.toLowerCase().includes('died');
-        break;
-      case 'transferred':
-        matchesFilter = cow.archiveReason.toLowerCase().includes('transferred') || 
-                       cow.archiveReason.toLowerCase().includes('relocated');
-        break;
-      case 'all':
-      case null:
-      default:
-        matchesFilter = true;
-        break;
+      case 'cows': matchesFilter = cow.category === 'Cow'; break;
+      case 'heifers': matchesFilter = cow.category === 'Heifer'; break;
+      case 'calves': matchesFilter = cow.category === 'Calf'; break;
+      case 'bulls': matchesFilter = cow.category === 'Bull'; break;
+      case 'all': default: matchesFilter = true; break;
     }
     
     return matchesSearch && matchesFilter;
@@ -378,9 +366,9 @@ const ArchivedAnimals = ({ cows, onRestoreCow, onPermanentlyDeleteCow, onViewPro
                             onClick={() => onViewProfile(cow)}
                             className="font-semibold text-slate-900 hover:text-blue-600 transition-colors text-left"
                           >
-                            {cow.name}
+                            {getDisplayName(cow)}
                           </button>
-                          <div className="text-sm text-slate-500">#{cow.tagNumber}</div>
+                          {cow.name?.trim() && <div className="text-sm text-slate-500">#{cow.tagNumber}</div>}
                         </div>
                       </div>
                     </td>
@@ -485,7 +473,7 @@ const ArchivedAnimals = ({ cows, onRestoreCow, onPermanentlyDeleteCow, onViewPro
               <div className="max-h-20 overflow-y-auto">
                 {archivedCows.filter(cow => selectedCows.has(cow.id)).map(cow => (
                   <p key={cow.id} className="text-sm text-red-600">
-                    {cow.name} (#{cow.tagNumber})
+                    {getDisplayNameWithTag(cow)}
                   </p>
                 ))}
               </div>

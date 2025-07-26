@@ -182,20 +182,15 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
             <div>
               <label className="flex items-center space-x-2 text-sm font-medium text-slate-700 mb-2">
                 <User className="w-4 h-4" />
-                <span>Name *</span>
+                <span>Name (Optional)</span>
               </label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => handleChange('name', e.target.value)}
-                className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
-                  errors.name ? 'border-red-300 bg-red-50' : 'border-slate-300'
-                }`}
-                placeholder="e.g., Bella, Luna, Daisy"
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                placeholder="e.g., Bella, Luna, Daisy (optional)"
               />
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-              )}
             </div>
 
             {/* Date of Birth */}

@@ -112,10 +112,14 @@ const OverviewTab = memo(({ cow, onEditRecord, onDeleteRecord }) => {
           </div>
           <div className="flex-1">
             <div className="flex items-center space-x-3 mb-2">
-              <h3 className="text-2xl font-bold text-slate-900">{cow.name}</h3>
-              <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
-                #{cow.tagNumber}
-              </span>
+              <h3 className="text-2xl font-bold text-slate-900">
+                {cow.name?.trim() || `#${cow.tagNumber}`}
+              </h3>
+              {cow.name?.trim() && (
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-sm font-medium">
+                  #{cow.tagNumber}
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div className="flex items-center space-x-2">
@@ -884,7 +888,9 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
               </div>
               <div>
                 <div className="flex items-center space-x-3">
-                  <h2 className="text-2xl font-bold text-slate-900">{normalizedCow.name}</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">
+                    {normalizedCow.name?.trim() || `#${normalizedCow.tagNumber}`}
+                  </h2>
                   <div className="flex items-center space-x-2">
                     {(() => {
                       const reproductiveStatus = calculateReproductiveStatus(normalizedCow);

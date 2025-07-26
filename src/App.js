@@ -29,6 +29,19 @@ import ArchivedAnimals from './components/ArchivedAnimals';
 import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBadge } from './utils/cowDataModel';
 
 function App() {
+  // Helper function to display cow name gracefully
+  const getCowDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
+
+  // Helper function to display cow name with tag number
+  const getCowDisplayNameWithTag = (cow) => {
+    if (cow.name?.trim()) {
+      return `${cow.name} #${cow.tagNumber}`;
+    }
+    return `#${cow.tagNumber}`;
+  };
+
   const [currentView, setCurrentView] = useState('dashboard');
   const [notifications] = useState(3);
 
@@ -41,248 +54,64 @@ function App() {
 
   // Bull inventory state
   const [bullInventory, setBullInventory] = useState([
-    { name: "Champion's Pride", naabCode: "BULL-001", straws: 150, cost: 100, tank: "Tank A", canister: "C-001", purchaseDate: "2024-01-10", supplier: "Genetics Inc." },
-    { name: "Golden Genes", naabCode: "BULL-002", straws: 75, cost: 120, tank: "Tank B", canister: "B-002", purchaseDate: "2024-02-15", supplier: "AgriSires" },
-    { name: "Thunder Bolt", naabCode: "BULL-003", straws: 3, cost: 150, tank: "Tank A", canister: "C-003", purchaseDate: "2024-03-01", supplier: "Elite Genetics" },
-    { name: "Silver Star", naabCode: "BULL-004", straws: 0, cost: 200, tank: "Tank B", canister: "B-004", purchaseDate: "2024-01-20", supplier: "Premium Sires" },
-    { name: "Blue Horizon", naabCode: "BULL-005", straws: 1, cost: 180, tank: "Tank C", canister: "C-005", purchaseDate: "2024-02-10", supplier: "Genetics Inc." }
+    {
+      id: 'bull-1',
+      name: "Champion's Pride",
+      naabCode: 'CHAMP001',
+      breed: 'Holstein',
+      straws: 25,
+      cost: 25.00,
+      description: 'High milk production, excellent udder conformation'
+    },
+    {
+      id: 'bull-2',
+      name: 'Milk Master',
+      naabCode: 'MILK002',
+      breed: 'Holstein',
+      straws: 18,
+      cost: 30.00,
+      description: 'Superior milk yield, strong legs and feet'
+    }
   ]);
+
+  // Profile data state for farm name display
+  const [profileData, setProfileData] = useState({
+    farmName: 'Holstein Pro Farm',
+    ownerName: 'Jason Burianek',
+    farmAddress: '123 Dairy Lane, Farmville, CA 90210',
+    phone: '+1 (555) 123-4567',
+    email: 'jason@holsteinpro.com',
+    operationType: 'Dairy',
+    herdSize: '100-500',
+    yearsInOperation: '15',
+    farmLogo: null
+  });
 
   // Load cows from localStorage on app start
   useEffect(() => {
-    const savedCows = localStorage.getItem('cattleAppCows');
-    if (savedCows) {
-      try {
+    try {
+      const savedCows = localStorage.getItem('cattleAppCows');
+      if (savedCows) {
         const parsedCows = JSON.parse(savedCows);
         setCows(parsedCows);
         console.log('✅ Loaded cows from localStorage:', parsedCows.length);
-      } catch (error) {
-        console.error('❌ Error loading cows from localStorage:', error);
       }
-    } else {
-      // Create sample cows with health records to demonstrate health scoring
-      const sampleCows = [
-        {
-          id: 'cow-1',
-          name: 'Bella',
-          tagNumber: '001',
-          breed: 'Holstein',
-          category: 'Cow',
-          gender: 'Female',
-          dateOfBirth: '2020-03-15',
-          status: 'Active',
-          productionStatus: 'Milking',
-          location: 'Barn A',
-          notes: 'High producer',
-          healthRecords: [
-            {
-              id: 'health-1',
-              type: 'Mastitis',
-              date: '2024-01-15',
-              description: 'Left front quarter - treated with antibiotics',
-              duration: '7'
-            },
-            {
-              id: 'health-2',
-              type: 'Pregnancy Check',
-              date: '2024-02-20',
-              description: 'Negative - not pregnant',
-              duration: '0'
-            }
-          ],
-          breedingRecords: [
-            {
-              id: 'breeding-1',
-              cowId: 'cow-1', // Add cowId to link to Bella
-              date: '2024-01-10',
-              semenId: 'CHAMP001',
-              bullName: "Champion's Pride",
-              method: 'AI',
-              notes: 'First breeding attempt'
-            },
-            {
-              id: 'breeding-2',
-              cowId: 'cow-1', // Add cowId to link to Bella
-              date: '2024-02-15',
-              semenId: 'CHAMP001',
-              bullName: "Champion's Pride",
-              method: 'AI',
-              notes: 'Second breeding attempt'
-            }
-          ]
-        },
-        {
-          id: 'cow-2',
-          name: 'Daisy',
-          tagNumber: '002',
-          breed: 'Jersey',
-          category: 'Cow',
-          gender: 'Female',
-          dateOfBirth: '2019-08-22',
-          status: 'Active',
-          productionStatus: 'Milking',
-          location: 'Barn B',
-          notes: 'High butterfat content',
-          healthRecords: [
-            {
-              id: 'health-3',
-              type: 'D.A.',
-              date: '2024-01-20',
-              description: 'Left displaced abomasum - surgical correction',
-              duration: '14'
-            },
-            {
-              id: 'health-4',
-              type: 'Surgery',
-              date: '2024-01-20',
-              description: 'Abomasopexy procedure',
-              duration: '30'
-            },
-            {
-              id: 'health-5',
-              type: 'Pregnancy Check',
-              date: '2024-03-15',
-              description: 'Negative - not pregnant after multiple attempts',
-              duration: '0'
-            }
-          ],
-          breedingRecords: [
-            {
-              id: 'breeding-3',
-              cowId: 'cow-2', // Add cowId to link to Daisy
-              date: '2024-01-25',
-              semenId: 'GOLD001',
-              bullName: 'Golden Genes',
-              method: 'AI',
-              notes: 'First breeding attempt'
-            },
-            {
-              id: 'breeding-4',
-              cowId: 'cow-2', // Add cowId to link to Daisy
-              date: '2024-02-20',
-              semenId: 'GOLD001',
-              bullName: 'Golden Genes',
-              method: 'AI',
-              notes: 'Second breeding attempt'
-            },
-            {
-              id: 'breeding-5',
-              cowId: 'cow-2', // Add cowId to link to Daisy
-              date: '2024-03-10',
-              semenId: 'CHAMP001',
-              bullName: "Champion's Pride",
-              method: 'AI',
-              notes: 'Third breeding attempt - different bull'
-            }
-          ]
-        },
-        {
-          id: 'cow-3',
-          name: 'Rosie',
-          tagNumber: '003',
-          breed: 'Holstein',
-          category: 'Heifer',
-          gender: 'Female',
-          dateOfBirth: '2022-05-10',
-          status: 'Active',
-          productionStatus: 'Non-Milking',
-          location: 'Pasture 1',
-          notes: 'First-time heifer',
-          healthRecords: [
-            {
-              id: 'health-5',
-              type: 'Cystic',
-              date: '2024-01-25',
-              description: 'Multiple ovarian cysts detected',
-              duration: '30'
-            },
-            {
-              id: 'health-6',
-              type: 'Hoof Trimming',
-              date: '2024-02-10',
-              description: 'Routine hoof trimming',
-              duration: '180'
-            },
-            {
-              id: 'health-7',
-              type: 'Pregnancy Check',
-              date: '2024-03-20',
-              description: 'Positive - confirmed pregnant',
-              duration: '0'
-            }
-          ],
-          breedingRecords: [
-            {
-              id: 'breeding-6',
-              cowId: 'cow-3', // Add cowId to link to Rosie
-              date: '2024-02-15',
-              semenId: 'CHAMP001',
-              bullName: "Champion's Pride",
-              method: 'AI',
-              notes: 'First breeding attempt - successful'
-            }
-          ]
-        },
-        {
-          id: 'cow-4',
-          name: 'Molly',
-          tagNumber: '004',
-          breed: 'Angus',
-          category: 'Cow',
-          gender: 'Female',
-          dateOfBirth: '2021-11-08',
-          status: 'Active',
-          productionStatus: 'Milking',
-          location: 'Barn A',
-          notes: 'Beef cow',
-          healthRecords: [
-            {
-              id: 'health-7',
-              type: 'Injury',
-              date: '2024-01-30',
-              description: 'Minor leg injury from fence',
-              duration: '14'
-            },
-            {
-              id: 'health-8',
-              type: 'Deworming',
-              date: '2024-02-05',
-              description: 'Routine deworming treatment',
-              duration: '90'
-            }
-          ]
-        },
-        {
-          id: 'cow-5',
-          name: 'Sunny',
-          tagNumber: '005',
-          breed: 'Holstein',
-          category: 'Cow',
-          gender: 'Female',
-          dateOfBirth: '2020-12-03',
-          status: 'Active',
-          productionStatus: 'Milking',
-          location: 'Barn B',
-          notes: 'Perfect health record',
-          healthRecords: [
-            {
-              id: 'health-9',
-              type: 'Vaccination',
-              date: '2024-02-01',
-              description: 'Annual vaccination schedule completed'
-            },
-            {
-              id: 'health-10',
-              type: 'Routine Checkup',
-              date: '2024-02-15',
-              description: 'Regular health check - all good'
-            }
-          ]
+    } catch (error) {
+      console.error('❌ Error loading cows from localStorage:', error);
+    }
+
+    // Load profile data from localStorage
+    try {
+      const savedSettings = localStorage.getItem('holsteinProSettings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        if (settings.profile) {
+          setProfileData(settings.profile);
+          console.log('✅ Loaded profile data from localStorage:', settings.profile.farmName);
         }
-      ];
-      
-      setCows(sampleCows);
-      console.log('✅ Created sample cows with health records for demonstration');
+      }
+    } catch (error) {
+      console.error('❌ Error loading profile data from localStorage:', error);
     }
   }, []);
 
@@ -314,7 +143,7 @@ function App() {
             const hoursRemaining = Math.max(0, 18 - hoursSinceHeat);
             alerts.push({
               id: `breeding-${cow.id}-${heatRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Optimal breeding window - ${Math.round(hoursRemaining)} hours remaining`,
               priority: 'critical',
               type: 'breeding',
@@ -337,7 +166,7 @@ function App() {
             const daysOverdue = Math.abs(daysUntilDue);
             alerts.push({
               id: `calving-overdue-${cow.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Calving overdue by ${daysOverdue} days`,
               priority: 'critical',
               type: 'calving',
@@ -349,7 +178,7 @@ function App() {
           else if (daysUntilDue <= 7) {
             alerts.push({
               id: `calving-due-${cow.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Due to calve in ${daysUntilDue} days`,
               priority: 'high',
               type: 'calving',
@@ -361,7 +190,7 @@ function App() {
           else if (daysUntilDue <= 5) {
             alerts.push({
               id: `calving-monitoring-${cow.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Close monitoring needed - calving in ${daysUntilDue} days`,
               priority: 'high',
               type: 'calving',
@@ -389,15 +218,15 @@ function App() {
             const priority = daysOverdue > 30 ? 'high' : 'medium';
             const timeText = daysOverdue > 0 ? `${daysOverdue} days overdue` : 'Due today';
             
-            alerts.push({
-              id: `vaccination-${cow.id}-${vaccRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
-              message: `Vaccination due: ${vaccRecord.description || vaccRecord.medicine || 'vaccination'}`,
-              priority: priority,
-              type: 'health',
-              time: timeText,
-              cowId: cow.id
-            });
+                          alerts.push({
+                id: `vaccination-${cow.id}-${vaccRecord.id}`,
+                cow: getCowDisplayNameWithTag(cow),
+                message: `Vaccination due: ${vaccRecord.description || vaccRecord.medicine || 'vaccination'}`,
+                priority: priority,
+                type: 'health',
+                time: timeText,
+                cowId: cow.id
+              });
           }
         });
         
@@ -417,7 +246,7 @@ function App() {
             
             alerts.push({
               id: `deworming-${cow.id}-${dewormRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: 'Deworming treatment due',
               priority: 'medium',
               type: 'health',
@@ -443,7 +272,7 @@ function App() {
             
             alerts.push({
               id: `hoof-${cow.id}-${hoofRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: 'Hoof trimming overdue',
               priority: 'medium',
               type: 'health',
@@ -466,7 +295,7 @@ function App() {
           if (daysSinceMastitis <= 7 && !mastitisRecord.followUpCompleted) {
             alerts.push({
               id: `mastitis-followup-${cow.id}-${mastitisRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Mastitis follow-up needed: ${mastitisRecord.description || 'udder infection'}`,
               priority: 'high',
               type: 'health',
@@ -489,7 +318,7 @@ function App() {
           if (daysSinceDA <= 14 && !daRecord.followUpCompleted) {
             alerts.push({
               id: `da-followup-${cow.id}-${daRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `D.A. follow-up needed: ${daRecord.description || 'displaced abomasum'}`,
               priority: 'high',
               type: 'health',
@@ -512,7 +341,7 @@ function App() {
           if (daysSinceCystic <= 30 && !cysticRecord.followUpCompleted) {
             alerts.push({
               id: `cystic-followup-${cow.id}-${cysticRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Cystic ovaries follow-up needed: ${cysticRecord.description || 'reproductive issue'}`,
               priority: 'medium',
               type: 'health',
@@ -535,7 +364,7 @@ function App() {
           if (daysSinceSurgery <= 30 && !surgeryRecord.recoveryCompleted) {
             alerts.push({
               id: `surgery-recovery-${cow.id}-${surgeryRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Surgery recovery monitoring: ${surgeryRecord.description || 'post-operative care'}`,
               priority: 'high',
               type: 'health',
@@ -558,7 +387,7 @@ function App() {
           if (daysSinceInjury <= 30 && !injuryRecord.followUpCompleted) {
             alerts.push({
               id: `injury-followup-${cow.id}-${injuryRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Injury follow-up needed: ${injuryRecord.description || 'injury'}`,
               priority: 'high',
               type: 'health',
@@ -581,7 +410,7 @@ function App() {
           if (daysSinceIllness <= 14 && !illnessRecord.treatmentCompleted) {
             alerts.push({
               id: `illness-treatment-${cow.id}-${illnessRecord.id}`,
-              cow: `${cow.name} #${cow.tagNumber}`,
+              cow: getCowDisplayNameWithTag(cow),
               message: `Illness treatment in progress: ${illnessRecord.description || 'illness'}`,
               priority: 'high',
               type: 'health',
@@ -609,7 +438,7 @@ function App() {
           
           alerts.push({
             id: `pregnancy-${cow.id}`,
-            cow: `${cow.name} #${cow.tagNumber}`,
+            cow: getCowDisplayNameWithTag(cow),
             message: 'Pregnancy check due',
             priority: priority,
             type: 'health',
@@ -768,7 +597,13 @@ function App() {
   // Bull inventory management functions
   const handleUpdateBullInventory = (updatedBullInventory) => {
     setBullInventory(updatedBullInventory);
-    console.log('✅ Updated bull inventory:', updatedBullInventory.length, 'bulls');
+    console.log('✅ Bull inventory updated:', updatedBullInventory.length, 'bulls');
+  };
+
+  // Update profile data when settings are saved
+  const handleProfileUpdate = (updatedProfileData) => {
+    setProfileData(updatedProfileData);
+    console.log('✅ Profile data updated:', updatedProfileData.farmName);
   };
 
   const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
@@ -867,10 +702,10 @@ function App() {
   
   // Update metrics based on current cows data
   const updatedMetrics = {
-    total: { value: cows.length, change: '+12', trend: 'up' },
-    pregnant: { value: cows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length, change: '+5', trend: 'up' },
-    breeding: { value: getCowsInHeatToday().length, change: '-2', trend: 'down' },
-    health: { value: calculateHerdHealthScore(cows), change: '+1', trend: 'up' }
+    total: { value: cows.length },
+    pregnant: { value: cows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length },
+    breeding: { value: getCowsInHeatToday().length },
+    health: { value: calculateHerdHealthScore(cows) }
   };
 
   // Navigation items with better organization
@@ -896,6 +731,11 @@ function App() {
             <div>
               <h1 className="text-xl font-bold text-slate-900">Holstein Pro</h1>
               <p className="text-sm text-slate-500">Breeding Excellence</p>
+              {profileData.farmName && (
+                <p className="text-lg font-bold text-blue-600 mt-1">
+                  {profileData.farmName}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1008,11 +848,6 @@ function App() {
                     <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
-                    </div>
-                  <div className="mt-4 flex items-center space-x-2">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-sm text-green-600">{updatedMetrics.total.change}</span>
-                    <span className="text-sm text-slate-500">from last month</span>
                   </div>
                 </div>
 
@@ -1025,30 +860,20 @@ function App() {
                     <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
                       <Heart className="w-6 h-6 text-green-600" />
                     </div>
-                    </div>
-                  <div className="mt-4 flex items-center space-x-2">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-sm text-green-600">{updatedMetrics.pregnant.change}</span>
-                    <span className="text-sm text-slate-500">from last month</span>
                   </div>
-                    </div>
+                </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">In Heat</p>
                       <p className="text-3xl font-bold text-slate-900">{updatedMetrics.breeding.value}</p>
-                  </div>
+                    </div>
                     <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
                       <Zap className="w-6 h-6 text-orange-600" />
-                </div>
+                    </div>
                   </div>
-                  <div className="mt-4 flex items-center space-x-2">
-                    <TrendingUp className="w-4 h-4 text-red-500 rotate-180" />
-                    <span className="text-sm text-red-600">{updatedMetrics.breeding.change}</span>
-                    <span className="text-sm text-slate-500">from last month</span>
                 </div>
-              </div>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                   <div className="flex items-center justify-between">
@@ -1057,18 +882,13 @@ function App() {
                       <p className={`text-3xl font-bold ${getHealthScoreBadge(updatedMetrics.health.value).className.replace('px-3 py-1 text-sm font-bold rounded-full', '')}`}>
                         {updatedMetrics.health.value}%
                       </p>
-                  </div>
+                    </div>
                     <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
                       <Activity className="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
                 </div>
-                        </div>
-                  <div className="mt-4 flex items-center space-x-2">
-                    <TrendingUp className="w-4 h-4 text-green-500" />
-                    <span className="text-sm text-green-600">{updatedMetrics.health.change}</span>
-                    <span className="text-sm text-slate-500">from last month</span>
-                        </div>
-                      </div>
-                        </div>
+              </div>
 
               {/* Today's Tasks */}
               <TodaysTasks cows={cows} />
@@ -1214,7 +1034,10 @@ function App() {
 
           {/* Settings View */}
           {currentView === 'settings' && (
-            <SettingsView />
+            <SettingsView 
+              profileData={profileData} 
+              onProfileUpdate={handleProfileUpdate} 
+            />
           )}
         </main>
       </div>
