@@ -131,17 +131,10 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     ];
     
     const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'sire', 'dam', 'location', 'notes', 'status'];
-    const sampleData = [
-      ['001', 'Bella', '1995-03-15', 'Cow', 'Holstein', 'Champion', 'Daisy', 'Barn 1', 'Sample cow', 'Active'],
-      ['002', '', '2020-06-20', 'Heifer', 'Jersey', '', '', 'Pasture A', '', 'Active'],
-      ['003', 'Daisy', '2023-09-10', 'Calf', 'Holstein', 'Bull001', 'Bella', 'Calf Barn', 'Healthy calf', 'Active']
-    ];
     
+    // Create clean template with only headers (no sample data)
     let csvContent = instructions.join('\n') + '\n';
     csvContent += headers.join(',') + '\n';
-    sampleData.forEach(row => {
-      csvContent += row.join(',') + '\n';
-    });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -1721,7 +1714,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">Template Instructions</h3>
                   <p className="text-slate-600 mt-1">
-                    Important formatting rules for your CSV template
+                    Download a clean, empty CSV template and follow these formatting rules
                   </p>
                 </div>
                 <button
@@ -1814,9 +1807,10 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
 
                 {/* Tips */}
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-yellow-900 mb-3">💡 Tips for Success</h4>
+                  <h4 className="font-semibold text-yellow-900 mb-3">💡 Workflow Tips</h4>
                   <ul className="space-y-2 text-sm text-yellow-800">
-                    <li>• <strong>Use Excel/Google Sheets</strong> to fill out the template</li>
+                    <li>• <strong>Download the clean template</strong> (no sample data)</li>
+                    <li>• <strong>Use Excel/Google Sheets</strong> to fill out your animal data</li>
                     <li>• <strong>Set date column to text format</strong> before entering dates</li>
                     <li>• <strong>Use unique tag numbers</strong> for each animal</li>
                     <li>• <strong>Save as CSV format</strong> when finished</li>
@@ -1829,7 +1823,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
             <div className="p-6 border-t border-slate-200 bg-slate-50">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-600">
-                  Ready to download the template with these instructions?
+                  Ready to download the clean, empty template?
                 </div>
                 <div className="flex space-x-3">
                   <button
