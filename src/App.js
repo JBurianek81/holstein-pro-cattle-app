@@ -15,8 +15,13 @@ import {
   Award,
   Target,
   CheckCircle,
-  Archive
+  Archive,
+  LogOut
 } from 'lucide-react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
 import AddCowModal from './components/AddCowModal';
 import HerdManagement from './components/HerdManagement';
 import CowProfileModal from './components/CowProfileModal';
@@ -28,7 +33,9 @@ import SettingsView from './components/SettingsView';
 import ArchivedAnimals from './components/ArchivedAnimals';
 import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBadge } from './utils/cowDataModel';
 
-function App() {
+function AppContent() {
+  const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData } = useAuth();
+  
   // Helper function to display cow name gracefully
   const getCowDisplayName = (cow) => {
     return cow.name?.trim() || `#${cow.tagNumber}`;
@@ -43,9 +50,10 @@ function App() {
   };
 
   const [currentView, setCurrentView] = useState('dashboard');
+  const [authView, setAuthView] = useState('landing'); // 'landing', 'login', 'register'
 
   // Cow management state
-  const [cows, setCows] = useState([]);
+  const [cows, setCows] = useState(farmData?.cows || []);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
@@ -53,7 +61,7 @@ function App() {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   // Bull inventory state
-  const [bullInventory, setBullInventory] = useState([
+  const [bullInventory, setBullInventory] = useState(farmData?.bullInventory || [
     {
       id: 'bull-1',
       name: "Champion's Pride",
@@ -75,146 +83,88 @@ function App() {
   ]);
 
   // Profile data state for farm name display
-  const [profileData, setProfileData] = useState({
-    farmName: 'Holstein Pro Farm',
-    ownerName: 'Jason Burianek',
+  const [profileData, setProfileData] = useState(farmData?.profileData || {
+    farmName: farm?.name || 'Holstein Pro Farm',
+    ownerName: farm?.ownerName || 'Jason Burianek',
     farmAddress: '123 Dairy Lane, Farmville, CA 90210',
     phone: '+1 (555) 123-4567',
-    email: 'jason@holsteinpro.com',
-    operationType: 'Dairy',
-    herdSize: '100-500',
-    yearsInOperation: '15',
+    email: farm?.ownerEmail || 'jason@holsteinpro.com',
+    operationType: farm?.settings?.operationType || 'Dairy',
+    herdSize: farm?.settings?.herdSize || '100-500',
+    yearsInOperation: farm?.settings?.yearsInOperation || '15',
     farmLogo: null
   });
 
-  // Load cows from localStorage on app start
+  // Authentication handlers
+  const handleNavigate = (view) => {
+    setAuthView(view);
+  };
+
+  const handleLoginSuccess = (authData) => {
+    login(authData);
+  };
+
+  const handleRegisterSuccess = (authData) => {
+    login(authData);
+  };
+
+  // Show loading screen while auth is loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <Home className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Holstein Pro</h2>
+          <p className="text-slate-600">Loading your farm...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication pages if not authenticated
+  if (!user) {
+    switch (authView) {
+      case 'landing':
+        return <LandingPage onNavigate={handleNavigate} />;
+      case 'login':
+        return <LoginPage onNavigate={handleNavigate} onLoginSuccess={handleLoginSuccess} />;
+      case 'register':
+        return <RegisterPage onNavigate={handleNavigate} onRegisterSuccess={handleRegisterSuccess} />;
+      default:
+        return <LandingPage onNavigate={handleNavigate} />;
+    }
+  }
+
+  // Sync local state with auth context
   useEffect(() => {
-    try {
-      const savedCows = localStorage.getItem('cattleAppCows');
-      console.log('📂 LOADING from localStorage:', savedCows ? 'Found data' : 'No data');
-      
-      if (savedCows) {
-        const parsedCows = JSON.parse(savedCows);
-        console.log('📂 LOADED:', parsedCows.length, 'animals');
-        
-        // Validate the loaded data
-        if (Array.isArray(parsedCows)) {
-          // Clean up any debug test cows that might have been added during testing
-          const cleanedCows = parsedCows.filter(cow => 
-            !cow.id?.includes('debug-test-') && 
-            !cow.tagNumber?.includes('DEBUG') &&
-            !cow.name?.includes('Debug Test Cow')
-          );
-          
-          if (cleanedCows.length !== parsedCows.length) {
-            console.log('🧹 Cleaned up', parsedCows.length - cleanedCows.length, 'debug test cows');
-            setCows(cleanedCows);
-          } else {
-            setCows(parsedCows);
-          }
-          
-          console.log('✅ Successfully loaded cows from localStorage:', cleanedCows.length);
-        } else {
-          console.error('❌ Invalid data format in localStorage - expected array, got:', typeof parsedCows);
-          // Backup corrupted data and start fresh
-          localStorage.setItem('cattleAppCows_backup_' + Date.now(), savedCows);
-          localStorage.removeItem('cattleAppCows');
-          setCows([]);
-        }
-      } else {
-        console.log('📂 No existing data found in localStorage, starting with empty herd');
-        setCows([]);
-      }
-      
-      // Mark initial load as complete
+    if (farmData) {
+      setCows(farmData.cows || []);
+      setBullInventory(farmData.bullInventory || []);
+      setProfileData(farmData.profileData || {
+        farmName: farm?.name || 'Holstein Pro Farm',
+        ownerName: farm?.ownerName || 'Jason Burianek',
+        farmAddress: '123 Dairy Lane, Farmville, CA 90210',
+        phone: '+1 (555) 123-4567',
+        email: farm?.ownerEmail || 'jason@holsteinpro.com',
+        operationType: farm?.settings?.operationType || 'Dairy',
+        herdSize: farm?.settings?.herdSize || '100-500',
+        yearsInOperation: farm?.settings?.yearsInOperation || '15',
+        farmLogo: null
+      });
       setIsInitialLoadComplete(true);
-      console.log('✅ Initial load complete');
-    } catch (error) {
-      console.error('❌ Error loading cows from localStorage:', error);
-      // Backup corrupted data and start fresh
-      try {
-        const corruptedData = localStorage.getItem('cattleAppCows');
-        if (corruptedData) {
-          localStorage.setItem('cattleAppCows_backup_' + Date.now(), corruptedData);
-        }
-      } catch (backupError) {
-        console.error('❌ Failed to backup corrupted data:', backupError);
-      }
-      localStorage.removeItem('cattleAppCows');
-      setCows([]);
     }
+  }, [farmData, farm]);
 
-    // Load profile data from localStorage
-    try {
-      const savedSettings = localStorage.getItem('holsteinProSettings');
-      if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        if (settings.profile) {
-          setProfileData(settings.profile);
-          console.log('✅ Loaded profile data from localStorage:', settings.profile.farmName);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error loading profile data from localStorage:', error);
-    }
-  }, []);
-
-  // Save cows to localStorage whenever cows state changes
+  // Sync local state changes back to auth context
   useEffect(() => {
-    // Only save after initial load is complete to prevent race conditions
-    if (!isInitialLoadComplete) {
-      console.log('🔄 Skipping save - initial load not complete yet');
-      return;
+    if (isInitialLoadComplete && user?.farmCode) {
+      updateCows(cows);
+      updateBullInventory(bullInventory);
+      updateProfileData(profileData);
     }
-    
-    // Skip saving if cows is still the initial empty array (prevents overwriting on first load)
-    if (cows.length === 0) {
-      const existingData = localStorage.getItem('cattleAppCows');
-      if (existingData) {
-        console.log('🔄 Skipping save - cows array is empty but localStorage has data (likely initial load)');
-        return;
-      }
-    }
-    
-    try {
-      console.log('💾 SAVING to localStorage:', cows.length, 'animals');
-      
-      // Validate data before saving
-      if (!Array.isArray(cows)) {
-        console.error('❌ Invalid cows data - expected array, got:', typeof cows);
-        return;
-      }
-      
-      // Create a backup before overwriting
-      const existingData = localStorage.getItem('cattleAppCows');
-      if (existingData && cows.length === 0) {
-        console.warn('⚠️ WARNING: Attempting to save empty cows array when existing data exists');
-        console.warn('⚠️ This could indicate data loss - creating backup');
-        localStorage.setItem('cattleAppCows_backup_' + Date.now(), existingData);
-      }
-      
-      const cowsData = JSON.stringify(cows);
-      localStorage.setItem('cattleAppCows', cowsData);
-      console.log('💾 SAVED successfully - Data size:', cowsData.length, 'characters');
-      
-      // Verify the save was successful
-      const verifyData = localStorage.getItem('cattleAppCows');
-      if (verifyData === cowsData) {
-        console.log('✅ Save verification successful');
-      } else {
-        console.error('❌ Save verification failed - data mismatch');
-      }
-    } catch (error) {
-      console.error('❌ Error saving cows to localStorage:', error);
-      // Try to save a backup
-      try {
-        localStorage.setItem('cattleAppCows_backup_' + Date.now(), JSON.stringify(cows));
-        console.log('💾 Created backup due to save error');
-      } catch (backupError) {
-        console.error('❌ Failed to create backup:', backupError);
-      }
-    }
-  }, [cows, isInitialLoadComplete]);
+  }, [cows, bullInventory, profileData, isInitialLoadComplete, user?.farmCode, updateCows, updateBullInventory, updateProfileData]);
 
   // Generate comprehensive dynamic priority alerts from cow records
   const generatePriorityAlerts = () => {
@@ -861,19 +811,30 @@ function App() {
 
         {/* User Section */}
         <div className="mt-auto p-4 border-t border-slate-100">
-          <button
-            onClick={() => setCurrentView('settings')}
-            className="w-full flex items-center space-x-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
-          >
-            <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-600 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm font-bold">JB</span>
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-slate-900 truncate">Jason Burianek</p>
-              <p className="text-xs text-slate-500">Farm Manager</p>
+          <div className="space-y-2">
+            <button
+              onClick={() => setCurrentView('settings')}
+              className="w-full flex items-center space-x-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors"
+            >
+              <div className="w-8 h-8 bg-gradient-to-br from-slate-400 to-slate-600 rounded-lg flex items-center justify-center">
+                <span className="text-white text-sm font-bold">
+                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
               </div>
-            <Bell className="w-4 h-4 text-slate-400" />
-          </button>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-medium text-slate-900 truncate">{user?.name || 'User'}</p>
+                <p className="text-xs text-slate-500">{user?.role === 'owner' ? 'Farm Owner' : 'Team Member'}</p>
+              </div>
+            </button>
+            
+            <button
+              onClick={logout}
+              className="w-full flex items-center space-x-3 p-3 text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">Sign Out</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1128,6 +1089,15 @@ function App() {
         onUpdateBullInventory={handleUpdateBullInventory}
       />
     </div>
+  );
+}
+
+// Main App wrapper with AuthProvider
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
