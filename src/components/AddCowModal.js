@@ -86,13 +86,20 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
     e.preventDefault();
     setIsSubmitting(true);
 
+    console.log('🐄 ADD COW: Starting save process');
+    console.log('🐄 ADD COW: Form data:', formData);
+    console.log('🐄 ADD COW: Editing cow?', editingCow ? 'Yes' : 'No');
+
     const validation = validateCowData(formData);
     
     if (!validation.isValid) {
+      console.log('🐄 ADD COW: Validation failed:', validation.errors);
       setErrors(validation.errors);
       setIsSubmitting(false);
       return;
     }
+
+    console.log('🐄 ADD COW: Validation passed, creating cow record...');
 
     try {
       const cowRecord = editingCow 
@@ -107,11 +114,16 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
           }
         : createCowRecord(formData);
       
-      console.log('Saved cow:', cowRecord.name, editingCow ? '(updated)' : '(new)');
-      await onSave(cowRecord);
+      console.log('🐄 ADD COW: Cow record created:', cowRecord);
+      console.log('🐄 ADD COW: Calling onSave function...');
+      
+      const result = await onSave(cowRecord);
+      console.log('🐄 ADD COW: Save result:', result);
+      
+      console.log('🐄 ADD COW: Save successful, closing modal');
       onClose();
     } catch (error) {
-      console.error('Error saving cow:', error);
+      console.error('❌ ADD COW ERROR:', error);
       setErrors({ general: 'Failed to save cow record. Please try again.' });
     } finally {
       setIsSubmitting(false);

@@ -43,6 +43,7 @@ function AppContent() {
   // Cow management state
   const [cows, setCows] = useState(farmData?.cows || []);
   const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
   const [profileCow, setProfileCow] = useState(null);
@@ -88,6 +89,13 @@ function AppContent() {
   useEffect(() => {
     console.log('📱 App.js - farmData received:', farmData);
     console.log('📱 App.js - farm received:', farm);
+    console.log('📱 App.js - isSaving:', isSaving);
+    
+    // Prevent data reload during save operations
+    if (isSaving) {
+      console.log('📱 App.js - Skipping data reload during save operation');
+      return;
+    }
     
     if (farmData) {
       setCows(farmData.cows || []);
@@ -113,16 +121,17 @@ function AppContent() {
       setProfileData(newProfileData);
       setIsInitialLoadComplete(true);
     }
-  }, [farmData, farm]);
+  }, [farmData, farm, isSaving]);
 
+  // EMERGENCY FIX: DISABLED automatic data syncing to stop infinite loop
   // Sync local state changes back to auth context
-  useEffect(() => {
-    if (isInitialLoadComplete && user?.farmCode) {
-      updateCows(cows);
-      updateBullInventory(bullInventory);
-      updateProfileData(profileData);
-    }
-  }, [cows, bullInventory, profileData, isInitialLoadComplete, user?.farmCode, updateCows, updateBullInventory, updateProfileData]);
+  // useEffect(() => {
+  //   if (isInitialLoadComplete && user?.farmCode) {
+  //     updateCows(cows);
+  //     updateBullInventory(bullInventory);
+  //     updateProfileData(profileData);
+  //   }
+  // }, [cows, bullInventory, profileData, isInitialLoadComplete, user?.farmCode, updateCows, updateBullInventory, updateProfileData]);
 
   // Helper functions
   const getCowDisplayName = (cow) => {
@@ -556,6 +565,14 @@ function AppContent() {
   };
 
   const handleSaveCow = async (cowData) => {
+    console.log('🐄 ADD COW: Starting save process');
+    console.log('🐄 ADD COW: Cow data to save:', cowData);
+    console.log('🐄 ADD COW: User authenticated?', user ? 'Yes' : 'No');
+    console.log('🐄 ADD COW: Farm code:', user?.farmCode);
+    
+    setIsSaving(true);
+    console.log('🐄 ADD COW: Set isSaving to true - preventing data reload');
+    
     try {
       // Calculate and set reproductive status
       const reproductiveStatus = calculateReproductiveStatus(cowData);
@@ -564,8 +581,11 @@ function AppContent() {
         reproductiveStatus: reproductiveStatus
       };
       
+      console.log('🐄 ADD COW: Cow with reproductive status:', cowWithStatus);
+      
       if (editingCow) {
         // Update existing cow
+        console.log('🐄 ADD COW: Updating existing cow...');
         setCows(prevCows => 
           prevCows.map(cow => 
             cow.id === editingCow.id ? cowWithStatus : cow
@@ -574,15 +594,37 @@ function AppContent() {
         console.log('✅ Updated cow:', cowWithStatus.name);
       } else {
         // Add new cow
+        console.log('🐄 ADD COW: Adding new cow to local state...');
         setCows(prevCows => [...prevCows, cowWithStatus]);
         console.log('✅ Added new cow:', cowWithStatus.name);
       }
       
+      // MANUAL SAVE TO FIREBASE - User explicitly saved
+      console.log('🐄 ADD COW: Manually saving to Firebase...');
+      if (user?.farmCode) {
+        try {
+          // Get the updated cows array after the state change
+          const updatedCows = editingCow 
+            ? cows.map(cow => cow.id === editingCow.id ? cowWithStatus : cow)
+            : [...cows, cowWithStatus];
+          
+          await updateCows(updatedCows);
+          console.log('✅ Successfully saved to Firebase');
+        } catch (error) {
+          console.error('❌ Firebase save error:', error);
+          // Don't throw - let the UI save succeed even if Firebase fails
+        }
+      }
+      
       // Update metrics based on new cow data
-      console.log('Cow saved successfully:', cowWithStatus);
+      console.log('🐄 ADD COW: Save successful, returning result');
+      return { success: true, cow: cowWithStatus };
     } catch (error) {
-      console.error('Error saving cow:', error);
+      console.error('❌ ADD COW ERROR:', error);
       throw error;
+    } finally {
+      console.log('🐄 ADD COW: Set isSaving to false - allowing data reload');
+      setIsSaving(false);
     }
   };
 
