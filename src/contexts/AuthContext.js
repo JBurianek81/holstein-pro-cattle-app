@@ -68,6 +68,13 @@ export const AuthProvider = ({ children }) => {
               console.log('🔐 STEP 7: Setting farm data state:', dataResult.data);
               console.log('🔐 STEP 8: Farm profile data:', dataResult.data?.profileData);
               setFarmDataState(dataResult.data);
+              
+              // FORCE STATE UPDATE:
+              setFarmDataState(prevState => {
+                console.log('🔥 FORCING: Previous farmData state:', prevState);
+                console.log('🔥 FORCING: New farmData state:', dataResult.data);
+                return { ...dataResult.data };
+              });
             }
             
             // Load farm info
@@ -76,7 +83,10 @@ export const AuthProvider = ({ children }) => {
             
             if (farmResult.success) {
               console.log('🔐 STEP 10: Setting farm state:', farmResult.farm);
+              console.log('🚨 FARM STATE DEBUG: About to set farm state');
+              console.log('🚨 FARM STATE DEBUG: Farm data to set:', farmResult.farm);
               setFarm(farmResult.farm);
+              console.log('🚨 FARM STATE DEBUG: Farm state set successfully');
             }
           } else {
             console.log('🔐 STEP 4: User authenticated but no farmCode:', fullUser);
@@ -112,12 +122,20 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  // EMERGENCY FIX: DISABLED automatic farm data saving to stop infinite loop
   // Save farm data when it changes
+  // useEffect(() => {
+  //   if (user?.farmCode && farmData) {
+  //     setFarmData(user.farmCode, farmData);
+  //   }
+  // }, [farmData, user?.farmCode]);
+  
+  // 🚨 FARM STATE MONITORING: Track farm state changes
   useEffect(() => {
-    if (user?.farmCode && farmData) {
-      setFarmData(user.farmCode, farmData);
-    }
-  }, [farmData, user?.farmCode]);
+    console.log('🚨 FARM STATE MONITOR: Farm state changed to:', farm);
+    console.log('🚨 FARM STATE MONITOR: Farm state type:', typeof farm);
+    console.log('🚨 FARM STATE MONITOR: Farm state keys:', farm ? Object.keys(farm) : 'null');
+  }, [farm]);
 
   const login = async (authData) => {
     setUser(authData.user);
@@ -160,28 +178,173 @@ export const AuthProvider = ({ children }) => {
     }));
   };
 
-  const updateCows = (newCows) => {
-    setFarmDataState(prevData => ({
-      ...prevData,
-      cows: newCows
-    }));
-  };
-
-  const updateBullInventory = (newBullInventory) => {
-    setFarmDataState(prevData => ({
-      ...prevData,
-      bullInventory: newBullInventory
-    }));
-  };
-
-  const updateProfileData = (newProfileData) => {
-    setFarmDataState(prevData => ({
-      ...prevData,
-      profileData: {
-        ...prevData.profileData,
-        ...newProfileData
+  const updateCows = async (newCows) => {
+    console.log('🚨 EMERGENCY STOP: updateCows called - checking for infinite loop');
+    console.log('💾 FIREBASE SAVE: updateCows called with', newCows.length, 'cows');
+    console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
+    console.log('🔥 EMERGENCY: User authenticated:', !!user);
+    console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
+    
+    // Update local state
+    setFarmDataState(prevData => {
+      const updatedData = {
+        ...prevData,
+        cows: newCows
+      };
+      
+      // Save to Firebase with error handling
+      if (user?.farmCode) {
+        console.log('💾 FIREBASE SAVE: Attempting to save complete farm data to Firebase');
+        
+        // Use async IIFE to handle the async operation
+        (async () => {
+          try {
+            console.log('🔥 EMERGENCY: Starting Firestore save operation');
+            const result = await setFarmData(user.farmCode, updatedData);
+            console.log('🔥 EMERGENCY: Firestore save result:', result);
+            
+            if (result && result.success) {
+              console.log('✅ FIREBASE SAVE: Data saved successfully to Firestore');
+            } else {
+              console.error('❌ FIRESTORE ERROR: Save operation failed:', result?.error);
+              // Don't reload data if save failed - keep local changes
+              console.log('🚫 Skipping data reload due to save failure');
+            }
+          } catch (error) {
+            console.error('❌ FIRESTORE ERROR: Exception during save:', error);
+            console.error('❌ FIRESTORE ERROR: Error details:', {
+              code: error.code,
+              message: error.message,
+              stack: error.stack
+            });
+            // Don't reload data if save failed - keep local changes
+            console.log('🚫 Skipping data reload due to save exception');
+          }
+        })();
       }
-    }));
+      
+      return updatedData;
+    });
+  };
+
+  const updateBullInventory = async (newBullInventory) => {
+    console.log('🚨 EMERGENCY STOP: updateBullInventory called - checking for infinite loop');
+    console.log('💾 FIREBASE SAVE: updateBullInventory called with', newBullInventory.length, 'bulls');
+    console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
+    console.log('🔥 EMERGENCY: User authenticated:', !!user);
+    console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
+    
+    // Update local state
+    setFarmDataState(prevData => {
+      const updatedData = {
+        ...prevData,
+        bullInventory: newBullInventory
+      };
+      
+      // Save to Firebase with error handling
+      if (user?.farmCode) {
+        console.log('💾 FIREBASE SAVE: Attempting to save complete farm data to Firebase');
+        
+        // Use async IIFE to handle the async operation
+        (async () => {
+          try {
+            console.log('🔥 EMERGENCY: Starting Firestore save operation');
+            const result = await setFarmData(user.farmCode, updatedData);
+            console.log('🔥 EMERGENCY: Firestore save result:', result);
+            
+            if (result && result.success) {
+              console.log('✅ FIREBASE SAVE: Bull inventory saved successfully to Firestore');
+            } else {
+              console.error('❌ FIRESTORE ERROR: Bull inventory save failed:', result?.error);
+              // Don't reload data if save failed - keep local changes
+              console.log('🚫 Skipping data reload due to save failure');
+            }
+          } catch (error) {
+            console.error('❌ FIRESTORE ERROR: Exception during bull inventory save:', error);
+            console.error('❌ FIRESTORE ERROR: Error details:', {
+              code: error.code,
+              message: error.message,
+              stack: error.stack
+            });
+            // Don't reload data if save failed - keep local changes
+            console.log('🚫 Skipping data reload due to save exception');
+          }
+        })();
+      }
+      
+      return updatedData;
+    });
+  };
+
+  // Test Firebase connection
+  const testFirebaseConnection = async () => {
+    console.log('🔥 EMERGENCY: Testing Firebase connection...');
+    try {
+      // Try to read a test document
+      const testDoc = await getDoc(doc(db, 'test', 'connection'));
+      console.log('✅ Firebase connection test successful');
+      return true;
+    } catch (error) {
+      console.error('❌ FIRESTORE ERROR: Connection test failed:', error);
+      console.error('❌ FIRESTORE ERROR: Error details:', {
+        code: error.code,
+        message: error.message,
+        stack: error.stack
+      });
+      return false;
+    }
+  };
+
+  const updateProfileData = async (newProfileData) => {
+    console.log('🚨 EMERGENCY STOP: updateProfileData called - checking for infinite loop');
+    console.log('💾 FIREBASE SAVE: updateProfileData called');
+    console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
+    console.log('🔥 EMERGENCY: User authenticated:', !!user);
+    console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
+    
+    // Update local state
+    setFarmDataState(prevData => {
+      const updatedData = {
+        ...prevData,
+        profileData: {
+          ...prevData.profileData,
+          ...newProfileData
+        }
+      };
+      
+      // Save to Firebase with error handling
+      if (user?.farmCode) {
+        console.log('💾 FIREBASE SAVE: Attempting to save complete farm data to Firebase');
+        
+        // Use async IIFE to handle the async operation
+        (async () => {
+          try {
+            console.log('🔥 EMERGENCY: Starting Firestore save operation');
+            const result = await setFarmData(user.farmCode, updatedData);
+            console.log('🔥 EMERGENCY: Firestore save result:', result);
+            
+            if (result && result.success) {
+              console.log('✅ FIREBASE SAVE: Profile data saved successfully to Firestore');
+            } else {
+              console.error('❌ FIRESTORE ERROR: Profile data save failed:', result?.error);
+              // Don't reload data if save failed - keep local changes
+              console.log('🚫 Skipping data reload due to save failure');
+            }
+          } catch (error) {
+            console.error('❌ FIRESTORE ERROR: Exception during profile data save:', error);
+            console.error('❌ FIRESTORE ERROR: Error details:', {
+              code: error.code,
+              message: error.message,
+              stack: error.stack
+            });
+            // Don't reload data if save failed - keep local changes
+            console.log('🚫 Skipping data reload due to save exception');
+          }
+        })();
+      }
+      
+      return updatedData;
+    });
   };
 
   const value = {
@@ -195,6 +358,7 @@ export const AuthProvider = ({ children }) => {
     updateCows,
     updateBullInventory,
     updateProfileData,
+    testFirebaseConnection,
     isAuthenticated: !!user
   };
 

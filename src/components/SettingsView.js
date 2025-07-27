@@ -156,7 +156,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     // Instructions as comments to prevent Excel auto-formatting
     const instructions = [
       '# IMPORTANT: Date format must be YYYY-MM-DD (example: 1995-03-15)',
-      '# Do not let Excel auto-format dates - keep as text format',
+      '# Tip: In Excel, format date column as "Text" to prevent auto-formatting',
       '# Category options: Cow, Heifer, Calf, Bull',
       '# Production Status options (EXACT spelling required): Milking, Non-Milking, Dry',
       '# Reproductive Status will default to OPEN (add breeding records separately)',
@@ -204,19 +204,19 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     return data;
   };
 
-  // Convert date to YYYY-MM-DD format
+  // Convert date to YYYY-MM-DD format (internal storage format)
   const normalizeDate = (dateString) => {
     if (!dateString) return null;
     
     // Remove quotes and trim
     const cleanDate = dateString.replace(/['"]/g, '').trim();
     
-    // Already in YYYY-MM-DD format
+    // Already in YYYY-MM-DD format (primary format)
     if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
       return cleanDate;
     }
     
-    // Try MM/DD/YYYY format
+    // Try MM/DD/YYYY format (backward compatibility)
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanDate)) {
       const [month, day, year] = cleanDate.split('/');
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
@@ -228,7 +228,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
     
-    // Try DD/MM/YYYY format
+    // Try DD/MM/YYYY format (less common)
     if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanDate)) {
       const [day, month, year] = cleanDate.split('/');
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;

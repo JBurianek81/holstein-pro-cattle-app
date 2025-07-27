@@ -206,6 +206,21 @@ export const farmDataService = {
         const data = farmDataDoc.data();
         console.log('🗄️ DEBUG: Firestore - Retrieved data:', data);
         console.log('🗄️ DEBUG: Firestore - Profile data in document:', data.profileData);
+        
+        // 🚨 EMERGENCY DATA RECOVERY: Check data structure in firestoreService
+        console.log('🚨 EMERGENCY: firestoreService - Raw data from Firestore:', data);
+        console.log('🚨 EMERGENCY: firestoreService - data.cows:', data.cows);
+        console.log('🚨 EMERGENCY: firestoreService - data.bullInventory:', data.bullInventory);
+        console.log('🔍 firestoreService DATA STRUCTURE CHECK:', {
+          dataKeys: Object.keys(data),
+          cowsExists: 'cows' in data,
+          cowsType: typeof data.cows,
+          cowsIsArray: Array.isArray(data.cows),
+          bullInventoryExists: 'bullInventory' in data,
+          bullInventoryType: typeof data.bullInventory,
+          bullInventoryIsArray: Array.isArray(data.bullInventory)
+        });
+        
         return { success: true, data: data };
       } else {
         console.log('🗄️ DEBUG: Firestore - Document does not exist, returning default data');

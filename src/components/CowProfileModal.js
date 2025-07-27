@@ -601,7 +601,14 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
   };
 
   // Debug: Log cow data to see if it's being updated
-  console.log('🐄 CowProfileModal received cow data:', normalizedCow.name, 'breeding records:', normalizedCow.breedingRecords?.length || 0);
+  console.log('🐄 CowProfileModal received cow data:', {
+    cowName: normalizedCow.name,
+    cowId: normalizedCow.id,
+    breedingRecords: normalizedCow.breedingRecords?.length || 0,
+    healthRecords: normalizedCow.healthRecords?.length || 0,
+    calvingRecords: normalizedCow.calvingRecords?.length || 0,
+    fullCow: normalizedCow
+  });
 
   // Debug: Check if cow has required arrays
   if (!cow.healthRecords) console.log('Cow missing healthRecords array, adding empty array');
@@ -661,6 +668,14 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
   };
 
   const handleSaveRecord = (recordType, recordData) => {
+    console.log('🐄 SAVE RECORD: Starting save operation:', {
+      recordType,
+      cowName: normalizedCow.name,
+      cowId: normalizedCow.id,
+      currentBreedingRecords: normalizedCow.breedingRecords?.length || 0,
+      recordData
+    });
+    
     let updatedCow = { ...normalizedCow };
     
     if (editingRecord) {
@@ -717,7 +732,13 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
         case 'breeding':
           newRecord = createBreedingRecord(recordData);
           updatedCow.breedingRecords = [...normalizedCow.breedingRecords, newRecord];
-          console.log('Added breeding record to cow:', normalizedCow.name);
+          console.log('🐄 BREEDING RECORD CREATED:', {
+            cowName: normalizedCow.name,
+            cowId: normalizedCow.id,
+            newRecord,
+            updatedBreedingRecords: updatedCow.breedingRecords.length,
+            fullUpdatedCow: updatedCow
+          });
           
           // Handle bull inventory updates for new breeding records
           if (onBreedingRecordSaved && recordData.semenId) {
@@ -803,6 +824,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
       }
     }
 
+    console.log('🐄 SAVE RECORD: About to call onUpdateCow with:', {
+      cowName: updatedCow.name,
+      cowId: updatedCow.id,
+      finalBreedingRecords: updatedCow.breedingRecords?.length || 0,
+      finalHealthRecords: updatedCow.healthRecords?.length || 0,
+      finalCalvingRecords: updatedCow.calvingRecords?.length || 0,
+      fullUpdatedCow: updatedCow
+    });
+    
     onUpdateCow(updatedCow);
     setShowAddRecordModal(null);
     setEditingRecord(null);
@@ -946,7 +976,18 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
                 </>
               )}
               <button
-                onClick={onClose}
+                onClick={() => {
+                  console.log('🚪 PROFILE CLOSING: About to close profile');
+                  console.log('🚪 PROFILE CLOSING: Current cow data:', cow);
+                  console.log('🚪 PROFILE CLOSING: Breeding records on cow:', cow?.breedingRecords);
+                  
+                  // CRITICAL FIX: Save changes before closing
+                  console.log('💾 SAVING CHANGES: Calling onUpdateCow before closing');
+                  onUpdateCow(cow);
+                  
+                  onClose();
+                  console.log('🚪 PROFILE CLOSED: Profile closed');
+                }}
                 className="p-2 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-white"
               >
                 <X className="w-6 h-6" />

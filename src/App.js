@@ -34,7 +34,7 @@ import ArchivedAnimals from './components/ArchivedAnimals';
 import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBadge } from './utils/cowDataModel';
 
 function AppContent() {
-  const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData } = useAuth();
+  const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData, testFirebaseConnection } = useAuth();
   
   // ALL HOOKS FIRST - at the very top
   const [currentView, setCurrentView] = useState('dashboard');
@@ -42,7 +42,7 @@ function AppContent() {
 
   // Cow management state
   const [cows, setCows] = useState(farmData?.cows || []);
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddCowModalOpen, setIsAddCowModalOpen] = useState(false);
   const [editingCow, setEditingCow] = useState(null);
@@ -85,21 +85,100 @@ function AppContent() {
   });
 
   // ALL useEffect hooks at the top level
-  // Sync local state with auth context
-  useEffect(() => {
-    console.log('📱 App.js - farmData received:', farmData);
-    console.log('📱 App.js - farm received:', farm);
-    console.log('📱 App.js - isSaving:', isSaving);
-    
-    // Prevent data reload during save operations
-    if (isSaving) {
-      console.log('📱 App.js - Skipping data reload during save operation');
-      return;
-    }
+      // Sync local state with auth context
+    useEffect(() => {
+      console.log('🚨 EMERGENCY DEBUG: Main useEffect triggered');
+      console.log('🚨 EMERGENCY DEBUG: farmData received:', farmData);
+      console.log('🚨 EMERGENCY DEBUG: farm received:', farm);
+      console.log('🚨 EMERGENCY DEBUG: isSaving:', isSaving);
+      console.log('🚨 EMERGENCY DEBUG: Current cows count:', cows.length);
+      console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
+      console.log('🔥 EMERGENCY: User authenticated:', !!user);
+      console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
+      
+      // Test Firebase connection on first load
+      if (user && !isSaving) {
+        testFirebaseConnection().then(isConnected => {
+          console.log('🔥 EMERGENCY: Firebase connection test result:', isConnected);
+        });
+      }
+      
+      // Prevent data reload during save operations
+      if (isSaving) {
+        console.log('🚨 EMERGENCY DEBUG: Skipping data reload during save operation');
+        return;
+      }
+      
+      // Emergency check: Don't reload if we have local data and no farmData
+      if (cows.length > 0 && (!farmData || !farmData.cows)) {
+        console.log('🚨 EMERGENCY: Preventing stale data overwrite - keeping local data');
+        console.log('🚨 EMERGENCY: Local cows count:', cows.length);
+        console.log('🚨 EMERGENCY: FarmData cows count:', farmData?.cows?.length || 0);
+        return;
+      }
     
     if (farmData) {
-      setCows(farmData.cows || []);
-      setBullInventory(farmData.bullInventory || []);
+      // 🚨 EMERGENCY DATA RECOVERY: Comprehensive data extraction debugging
+      console.log('🚨 EMERGENCY: Raw farmData from Firebase:', farmData);
+      console.log('🚨 EMERGENCY: farmData.cows:', farmData.cows);
+      console.log('🚨 EMERGENCY: farmData.bullInventory:', farmData.bullInventory);
+      
+      // 🔍 DATA STRUCTURE CHECK: Verify data structure
+      console.log('🔍 DATA STRUCTURE CHECK:', {
+        farmDataKeys: Object.keys(farmData),
+        cowsExists: 'cows' in farmData,
+        cowsType: typeof farmData.cows,
+        cowsIsArray: Array.isArray(farmData.cows),
+        bullInventoryExists: 'bullInventory' in farmData,
+        bullInventoryType: typeof farmData.bullInventory,
+        bullInventoryIsArray: Array.isArray(farmData.bullInventory)
+      });
+      
+      console.log('🚨 EMERGENCY DEBUG: Setting cows from farmData:', farmData.cows?.length || 0, 'cows');
+      
+      // 📂 FIREBASE LOAD: What we loaded
+      console.log('📂 FIREBASE LOAD: What we loaded:', {
+        loadedCows: farmData.cows?.length || 0,
+        loadedBullInventory: farmData.bullInventory?.length || 0,
+        loadedProfileData: farmData.profileData,
+        loadedFarmData: farmData,
+        allLoadedData: farmData
+      });
+      
+      // ✅ RECOVERY: Robust data extraction with fallbacks
+      if (farmData.cows && Array.isArray(farmData.cows)) {
+        setCows(farmData.cows);
+        console.log('✅ RECOVERY: Setting cows to:', farmData.cows.length);
+      } else {
+        console.log('⚠️ RECOVERY: No valid cows array found, setting empty array');
+        setCows([]);
+      }
+      
+      if (farmData.bullInventory && Array.isArray(farmData.bullInventory)) {
+        setBullInventory(farmData.bullInventory);
+        console.log('✅ RECOVERY: Setting bulls to:', farmData.bullInventory.length);
+      } else {
+        console.log('⚠️ RECOVERY: No valid bullInventory array found, setting empty array');
+        setBullInventory([]);
+      }
+      
+      // 🐄 LOADED COW DETAILS: Debug breeding records in loaded data
+      console.log('🐄 LOADED COW DETAILS:', (farmData.cows || []).map(cow => ({
+        name: cow.name,
+        id: cow.id,
+        breedingRecords: cow.breedingRecords?.length || 0,
+        healthRecords: cow.healthRecords?.length || 0,
+        calvingRecords: cow.calvingRecords?.length || 0,
+        hasBreedingData: !!cow.breedingRecords,
+        breedingRecordsArray: cow.breedingRecords || [],
+        fullCow: cow
+      })));
+      
+      // 🐄 SUMMARY: Total breeding records loaded
+      const totalBreedingRecords = (farmData.cows || []).reduce((total, cow) => 
+        total + (cow.breedingRecords?.length || 0), 0
+      );
+      console.log('🐄 SUMMARY: Total breeding records loaded from Firebase:', totalBreedingRecords);
       
       // Use farm data to populate profileData, with fallbacks to existing profileData
       const newProfileData = {
@@ -117,11 +196,56 @@ function AppContent() {
         farmCodeLastRegenerated: farmData.profileData?.farmCodeLastRegenerated || null
       };
       
-      console.log('📱 App.js - Setting profileData:', newProfileData);
+      console.log('🚨 EMERGENCY DEBUG: Setting profileData:', newProfileData);
       setProfileData(newProfileData);
-      setIsInitialLoadComplete(true);
     }
-  }, [farmData, farm, isSaving]);
+  // 🚨 FINAL FIX: Disabled automatic data reload to prevent stale data overwrite
+  // Only load data on initial app startup, not after saves
+  }, []); // Empty dependency array - only load once on startup
+  
+    // 🚨 FINAL FIX: Main useEffect that only loads data ONCE
+  useEffect(() => {
+    console.log('🔄 RELOAD CHECK: useEffect triggered');
+    console.log('🔄 RELOAD CHECK: hasLoadedInitialData:', hasLoadedInitialData);
+    console.log('🔄 RELOAD CHECK: isSaving:', isSaving);
+    
+    // Skip if we're saving
+    if (isSaving) {
+      console.log('💾 SKIP: Currently saving data');
+      return;
+    }
+
+    // Skip if we've already loaded data once
+    if (hasLoadedInitialData) {
+      console.log('🚫 SKIP: Data already loaded once, never overwriting user data');
+      return;
+    }
+
+    // Wait for authentication
+    if (!user || !farm) {
+      console.log('⏳ SKIP: Waiting for authentication');
+      return;
+    }
+
+    // Wait for farmData with content
+    if (!farmData || !farmData.cows || farmData.cows.length === 0) {
+      console.log('⏳ SKIP: Waiting for farmData with cows');
+      return;
+    }
+
+    console.log('✅ LOADING: Loading data from Firebase (FIRST TIME ONLY)');
+    setCows(farmData.cows);
+    setBullInventory(farmData.bullInventory || []);
+    
+    if (farmData.profileData) {
+      setProfileData(farmData.profileData);
+    }
+
+    // Mark that we've loaded data - NEVER reload again
+    setHasLoadedInitialData(true);
+    console.log('🔒 LOCKED: Data loaded once, will never auto-reload again');
+
+  }, [farmData, user, farm, isSaving]);
 
   // EMERGENCY FIX: DISABLED automatic data syncing to stop infinite loop
   // Sync local state changes back to auth context
@@ -550,7 +674,9 @@ function AppContent() {
     });
   };
 
-  const alerts = generatePriorityAlerts();
+  // 🚨 EMERGENCY STOP: Disabled automatic priority alerts to stop infinite loop
+  // const alerts = generatePriorityAlerts();
+  const alerts = []; // Empty array to prevent infinite loop
 
   // Cow management functions
   const handleAddCow = () => {
@@ -565,13 +691,15 @@ function AppContent() {
   };
 
   const handleSaveCow = async (cowData) => {
-    console.log('🐄 ADD COW: Starting save process');
-    console.log('🐄 ADD COW: Cow data to save:', cowData);
-    console.log('🐄 ADD COW: User authenticated?', user ? 'Yes' : 'No');
-    console.log('🐄 ADD COW: Farm code:', user?.farmCode);
+    console.log('🚨 EMERGENCY STOP: handleSaveCow called - checking for infinite loop');
+    console.log('🚨 EMERGENCY DEBUG: handleSaveCow called');
+    console.log('🚨 EMERGENCY DEBUG: Current cows count:', cows.length);
+    console.log('🚨 EMERGENCY DEBUG: Cow data to save:', cowData);
+    console.log('🚨 EMERGENCY DEBUG: User authenticated?', user ? 'Yes' : 'No');
+    console.log('🚨 EMERGENCY DEBUG: Farm code:', user?.farmCode);
     
     setIsSaving(true);
-    console.log('🐄 ADD COW: Set isSaving to true - preventing data reload');
+    console.log('🚨 EMERGENCY DEBUG: Set isSaving to true - preventing data reload');
     
     try {
       // Calculate and set reproductive status
@@ -581,49 +709,107 @@ function AppContent() {
         reproductiveStatus: reproductiveStatus
       };
       
-      console.log('🐄 ADD COW: Cow with reproductive status:', cowWithStatus);
+      console.log('🚨 EMERGENCY DEBUG: Cow with reproductive status:', cowWithStatus);
       
       if (editingCow) {
         // Update existing cow
-        console.log('🐄 ADD COW: Updating existing cow...');
-        setCows(prevCows => 
-          prevCows.map(cow => 
+        console.log('🚨 EMERGENCY DEBUG: Updating existing cow...');
+        setCows(prevCows => {
+          const updatedCows = prevCows.map(cow => 
             cow.id === editingCow.id ? cowWithStatus : cow
-          )
-        );
+          );
+          console.log('🚨 EMERGENCY DEBUG: Updated cows array length:', updatedCows.length);
+          return updatedCows;
+        });
         console.log('✅ Updated cow:', cowWithStatus.name);
       } else {
         // Add new cow
-        console.log('🐄 ADD COW: Adding new cow to local state...');
-        setCows(prevCows => [...prevCows, cowWithStatus]);
+        console.log('🚨 EMERGENCY DEBUG: Adding new cow to local state...');
+        setCows(prevCows => {
+          const updatedCows = [...prevCows, cowWithStatus];
+          console.log('🚨 EMERGENCY DEBUG: Updated cows array length:', updatedCows.length);
+          return updatedCows;
+        });
         console.log('✅ Added new cow:', cowWithStatus.name);
       }
       
       // MANUAL SAVE TO FIREBASE - User explicitly saved
-      console.log('🐄 ADD COW: Manually saving to Firebase...');
+      console.log('🚨 EMERGENCY DEBUG: Manually saving to Firebase...');
+      console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
+      console.log('🔥 EMERGENCY: User authenticated:', !!user);
+      console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
+      
       if (user?.farmCode) {
         try {
-          // Get the updated cows array after the state change
+          // Use functional update to get the most current state
           const updatedCows = editingCow 
             ? cows.map(cow => cow.id === editingCow.id ? cowWithStatus : cow)
             : [...cows, cowWithStatus];
           
-          await updateCows(updatedCows);
-          console.log('✅ Successfully saved to Firebase');
+          console.log('🚨 EMERGENCY DEBUG: Saving cows array to Firebase:', updatedCows.length, 'cows');
+          
+          // 💾 FIREBASE SAVE: What we are saving
+          console.log('💾 FIREBASE SAVE: What we are saving:', {
+            cows: updatedCows.length,
+            bullInventory: bullInventory.length,
+            profileData: profileData,
+            allData: { 
+              cows: updatedCows, 
+              bullInventory, 
+              profileData 
+            }
+          });
+          
+          // 🐄 SAVE COW DETAILS: Debug breeding records being saved
+          console.log('🐄 SAVE COW DETAILS:', updatedCows.map(cow => ({
+            name: cow.name,
+            id: cow.id,
+            breedingRecords: cow.breedingRecords?.length || 0,
+            healthRecords: cow.healthRecords?.length || 0,
+            calvingRecords: cow.calvingRecords?.length || 0,
+            hasBreedingData: !!cow.breedingRecords,
+            breedingRecordsArray: cow.breedingRecords || [],
+            fullCow: cow
+          })));
+          
+          // 🐄 SAVE SUMMARY: Total breeding records being saved
+          const totalBreedingRecordsToSave = updatedCows.reduce((total, cow) => 
+            total + (cow.breedingRecords?.length || 0), 0
+          );
+          console.log('🐄 SAVE SUMMARY: Total breeding records being saved to Firebase:', totalBreedingRecordsToSave);
+          
+          console.log('🔥 EMERGENCY: Starting Firestore save operation');
+          const result = await updateCows(updatedCows);
+          console.log('🔥 EMERGENCY: Firestore save result:', result);
+          
+                                if (result && result.success) {
+                        console.log('✅ Successfully saved to Firebase');
+                        console.log('🚨 FINAL FIX: Trusting local state after successful save - NO DATA RELOAD');
+                      } else {
+            console.error('❌ FIRESTORE ERROR: Save operation failed:', result?.error);
+            // Don't throw - let the UI save succeed even if Firebase fails
+            console.log('🚫 Firebase save failed but keeping local changes');
+          }
         } catch (error) {
-          console.error('❌ Firebase save error:', error);
+          console.error('❌ FIRESTORE ERROR: Exception during save:', error);
+          console.error('❌ FIRESTORE ERROR: Error details:', {
+            code: error.code,
+            message: error.message,
+            stack: error.stack
+          });
           // Don't throw - let the UI save succeed even if Firebase fails
+          console.log('🚫 Firebase save exception but keeping local changes');
         }
       }
       
       // Update metrics based on new cow data
-      console.log('🐄 ADD COW: Save successful, returning result');
+      console.log('🚨 EMERGENCY DEBUG: Save successful, returning result');
       return { success: true, cow: cowWithStatus };
     } catch (error) {
       console.error('❌ ADD COW ERROR:', error);
       throw error;
     } finally {
-      console.log('🐄 ADD COW: Set isSaving to false - allowing data reload');
+      console.log('🚨 EMERGENCY DEBUG: Set isSaving to false - allowing data reload');
       setIsSaving(false);
     }
   };
@@ -665,16 +851,78 @@ function AppContent() {
 
   // Profile modal handlers
   const handleViewProfile = (cow) => {
-    setProfileCow(cow);
-    setIsProfileModalOpen(true);
+    console.log('🐄 OPENING PROFILE: Cow data being passed:', {
+      cowName: cow.name,
+      cowId: cow.id,
+      breedingRecords: cow.breedingRecords?.length || 0,
+      fullCow: cow
+    });
+    
+    // Get fresh cow data from current cows array to ensure we have latest breeding records
+    const freshCow = cows.find(c => c.id === cow.id);
+    console.log('🐄 APP.JS: Setting profile cow:', {
+      cowName: freshCow?.name,
+      cowId: freshCow?.id,
+      breedingRecords: freshCow?.breedingRecords?.length || 0,
+      fromArray: cows.find(c => c.id === cow.id)?.breedingRecords?.length || 0,
+      freshCowData: freshCow
+    });
+    
+    if (freshCow) {
+      setProfileCow(freshCow);
+      setIsProfileModalOpen(true);
+    } else {
+      console.error('❌ COW PROFILE ERROR: Fresh cow data not found for ID:', cow.id);
+      // Fallback to original cow data
+      setProfileCow(cow);
+      setIsProfileModalOpen(true);
+    }
   };
 
   const handleCloseProfile = () => {
+    console.log('🚪 CLOSING PROFILE: Animal profile closing');
+    console.log('🚪 CLOSING PROFILE: Current animal data:', profileCow);
+    console.log('🚪 CLOSING PROFILE: Records on this animal:', profileCow?.breedingRecords || []);
+    
     setIsProfileModalOpen(false);
     setProfileCow(null);
   };
 
   const handleUpdateCowFromProfile = (updatedCow) => {
+    console.log('🔴 CRITICAL: onUpdateCow called!');
+    console.log('🔴 CRITICAL: Updated cow received:', updatedCow);
+    console.log('🔴 CRITICAL: Breeding records in updated cow:', updatedCow?.breedingRecords?.length || 0);
+    
+    console.log('🔴 SAVING RECORD: About to save animal data');
+    console.log('🔴 SAVING RECORD: Animal ID:', updatedCow.id);
+    console.log('🔴 SAVING RECORD: New record data:', updatedCow.breedingRecords);
+    console.log('🔴 SAVING RECORD: Updated animal:', updatedCow);
+    console.log('🔴 SAVING RECORD: Current cows state before save:', cows);
+    
+    // CRITICAL DEBUG: Check if updatedCow has breeding records
+    console.log('🚨 CRITICAL DEBUG: updatedCow breeding records check:', {
+      hasBreedingRecords: !!updatedCow.breedingRecords,
+      breedingRecordsLength: updatedCow.breedingRecords?.length || 0,
+      breedingRecordsArray: updatedCow.breedingRecords || [],
+      updatedCowKeys: Object.keys(updatedCow)
+    });
+    
+    // CRITICAL DEBUG: Find the current cow in state to compare
+    const currentCowInState = cows.find(c => c.id === updatedCow.id);
+    console.log('🚨 CRITICAL DEBUG: Current cow in state:', {
+      hasBreedingRecords: !!currentCowInState?.breedingRecords,
+      breedingRecordsLength: currentCowInState?.breedingRecords?.length || 0,
+      breedingRecordsArray: currentCowInState?.breedingRecords || [],
+      currentCowKeys: currentCowInState ? Object.keys(currentCowInState) : 'not found'
+    });
+    
+    console.log('🐄 CLOSING PROFILE: Cow data being saved back:', {
+      cowName: updatedCow.name,
+      cowId: updatedCow.id,
+      breedingRecords: updatedCow.breedingRecords?.length || 0,
+      fullUpdatedCow: updatedCow
+    });
+    
     // Calculate and set reproductive status
     const reproductiveStatus = calculateReproductiveStatus(updatedCow);
     const cowWithStatus = {
@@ -682,30 +930,88 @@ function AppContent() {
       reproductiveStatus: reproductiveStatus
     };
 
-      setCows(prevCows => 
-        prevCows.map(cow => 
-        cow.id === updatedCow.id ? cowWithStatus : cow
-      )
+    console.log('🐄 UPDATING COW IN ARRAY: Before update - cows with breeding records:', 
+      cows.filter(c => c.breedingRecords?.length > 0).map(c => ({ name: c.name, records: c.breedingRecords?.length }))
     );
+
+    setCows(prevCows => {
+      const updatedCows = prevCows.map(cow => 
+        cow.id === updatedCow.id ? cowWithStatus : cow
+      );
+      
+          console.log('🐄 UPDATING COW IN ARRAY: After update - cows with breeding records:', 
+      updatedCows.filter(c => c.breedingRecords?.length > 0).map(c => ({ name: c.name, records: c.breedingRecords?.length }))
+    );
+    
+    // 🐄 UPDATE COW DETAILS: Debug breeding records after profile update
+    console.log('🐄 UPDATE COW DETAILS:', updatedCows.map(cow => ({
+      name: cow.name,
+      id: cow.id,
+      breedingRecords: cow.breedingRecords?.length || 0,
+      healthRecords: cow.healthRecords?.length || 0,
+      calvingRecords: cow.calvingRecords?.length || 0,
+      hasBreedingData: !!cow.breedingRecords,
+      breedingRecordsArray: cow.breedingRecords || [],
+      fullCow: cow
+    })));
+    
+    // 🐄 UPDATE SUMMARY: Total breeding records after profile update
+    const totalBreedingRecordsAfterUpdate = updatedCows.reduce((total, cow) => 
+      total + (cow.breedingRecords?.length || 0), 0
+    );
+    console.log('🐄 UPDATE SUMMARY: Total breeding records after profile update:', totalBreedingRecordsAfterUpdate);
+      
+      return updatedCows;
+    });
     
     // Also update the profileCow state to reflect changes immediately
     setProfileCow(cowWithStatus);
-    console.log('✅ Updated cow profile for:', cowWithStatus.name);
-        };
+    console.log('✅ Updated cow profile for:', cowWithStatus.name, 'with', cowWithStatus.breedingRecords?.length || 0, 'breeding records');
+  };
 
   // Bull inventory management functions
-  const handleUpdateBullInventory = (updatedBullInventory) => {
+  const handleUpdateBullInventory = async (updatedBullInventory) => {
+    console.log('💾 FIREBASE SAVE: handleUpdateBullInventory called with', updatedBullInventory.length, 'bulls');
     setBullInventory(updatedBullInventory);
+    
+    // Save to Firebase
+    if (user?.farmCode) {
+      try {
+        await updateBullInventory(updatedBullInventory);
+        console.log('✅ Bull inventory saved to Firebase');
+      } catch (error) {
+        console.error('❌ Firebase save error for bull inventory:', error);
+      }
+    }
+    
     console.log('✅ Bull inventory updated:', updatedBullInventory.length, 'bulls');
   };
 
   // Update profile data when settings are saved
-  const handleProfileUpdate = (updatedProfileData) => {
+  const handleProfileUpdate = async (updatedProfileData) => {
+    console.log('💾 FIREBASE SAVE: handleProfileUpdate called');
     setProfileData(updatedProfileData);
+    
+    // Save to Firebase
+    if (user?.farmCode) {
+      try {
+        await updateProfileData(updatedProfileData);
+        console.log('✅ Profile data saved to Firebase');
+      } catch (error) {
+        console.error('❌ Firebase save error for profile data:', error);
+      }
+    }
+    
     console.log('✅ Profile data updated:', updatedProfileData.farmName);
   };
 
-  const handleBreedingRecordSaved = (cow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
+  const handleBreedingRecordSaved = async (cow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
+    console.log('🔴 SAVING RECORD: About to save animal data');
+    console.log('🔴 SAVING RECORD: Animal ID:', cow.id);
+    console.log('🔴 SAVING RECORD: New record data:', breedingRecord);
+    console.log('🔴 SAVING RECORD: Updated animal:', cow);
+    console.log('🔴 SAVING RECORD: Current cows state before save:', cows);
+    
     console.log('🐄 handleBreedingRecordSaved called with:', { 
       cow: cow.name, 
       breedingRecord, 
@@ -754,10 +1060,30 @@ function AppContent() {
       return updatedInventory;
     });
 
+    // Save bull inventory to Firebase after breeding record changes
+    if (user?.farmCode) {
+      try {
+        // Get the updated inventory from the state setter
+        const updatedInventory = bullInventory.map(bull => {
+          if (isEditing && oldBreedingRecord && bull.naabCode === oldBreedingRecord.semenId) {
+            return { ...bull, straws: Math.max(0, bull.straws + 1) };
+          } else if (bull.naabCode === selectedBullId) {
+            return { ...bull, straws: Math.max(0, bull.straws - 1) };
+          }
+          return bull;
+        });
+        
+        await updateBullInventory(updatedInventory);
+        console.log('✅ Bull inventory saved to Firebase after breeding record');
+      } catch (error) {
+        console.error('❌ Firebase save error for bull inventory after breeding record:', error);
+      }
+    }
+
     console.log('✅ Bull inventory updated for breeding record');
   };
 
-  const handleBreedingRecordDeleted = (cow, deletedBreedingRecord) => {
+  const handleBreedingRecordDeleted = async (cow, deletedBreedingRecord) => {
     console.log('🐄 handleBreedingRecordDeleted called with:', { 
       cow: cow.name, 
       deletedBreedingRecord 
@@ -777,6 +1103,23 @@ function AppContent() {
       console.log('🐄 Updated bull inventory after deletion:', updatedInventory.length, 'bulls');
       return updatedInventory;
     });
+
+    // Save bull inventory to Firebase after breeding record deletion
+    if (user?.farmCode) {
+      try {
+        const currentBullInventory = bullInventory.map(bull => {
+          if (bull.naabCode === deletedBreedingRecord.semenId) {
+            const newStrawCount = bull.straws + 1;
+            return { ...bull, straws: newStrawCount };
+          }
+          return bull;
+        });
+        await updateBullInventory(currentBullInventory);
+        console.log('✅ Bull inventory saved to Firebase after breeding record deletion');
+      } catch (error) {
+        console.error('❌ Firebase save error for bull inventory after breeding record deletion:', error);
+      }
+    }
 
     console.log('✅ Bull inventory restored after breeding record deletion');
   };

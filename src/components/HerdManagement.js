@@ -855,7 +855,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
                             onClick={() => onViewProfile(cow)}
                             className="font-semibold text-slate-900 hover:text-blue-600 transition-colors text-left"
                           >
-                            {getDisplayName(cow)}
+                            {getDisplayNameWithTag(cow)}
                           </button>
                         </div>
                       </div>
