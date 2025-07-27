@@ -43,7 +43,6 @@ function App() {
   };
 
   const [currentView, setCurrentView] = useState('dashboard');
-  const [notifications] = useState(3);
 
   // Cow management state
   const [cows, setCows] = useState([]);
@@ -910,17 +909,7 @@ function App() {
                   placeholder="Search cattle, records..."
                   className="pl-10 pr-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
-                          </div>
-              
-              {/* Notifications */}
-              <button className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors">
-                <Bell className="w-5 h-5" />
-                {notifications > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {notifications}
-                  </span>
-                )}
-                          </button>
+              </div>
             </div>
           </div>
         </header>
