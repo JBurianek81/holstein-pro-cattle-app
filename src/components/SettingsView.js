@@ -124,8 +124,9 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     const instructions = [
       '# IMPORTANT: Date format must be YYYY-MM-DD (example: 1995-03-15)',
       '# Do not let Excel auto-format dates - keep as text format',
-      '# Category must be: Cow, Heifer, Calf, or Bull',
-      '# Production Status options: Milking, Non-milking, Dry (defaults based on category if blank)',
+      '# Category options: Cow, Heifer, Calf, Bull',
+      '# Production Status options (EXACT spelling required): Milking, Non-Milking, Dry',
+      '# Reproductive Status will default to OPEN (add breeding records separately)',
       '# Tag numbers must be unique',
       '# Required fields: tagNumber, dateOfBirth, category',
       '# Optional fields: name, breed, productionStatus, sire, dam, location, notes, status'
@@ -208,7 +209,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     const errors = [];
     const existingTags = new Set(cows.map(cow => cow.tagNumber));
     const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
-    const validProductionStatuses = ['Milking', 'Non-milking', 'Dry'];
+    const validProductionStatuses = ['Milking', 'Non-Milking', 'Dry'];
     
     // Check for duplicates within the CSV file itself
     const csvTags = new Set();
@@ -258,9 +259,23 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         rowErrors.push(`Category '${row.category}' must be one of: ${validCategories.join(', ')}`);
       }
       
-      // Production Status validation (optional field)
-      if (row.productionStatus?.trim() && !validProductionStatuses.includes(row.productionStatus)) {
-        rowErrors.push(`Production Status '${row.productionStatus}' must be one of: ${validProductionStatuses.join(', ')}`);
+      // Production Status validation (optional field) with case-insensitive normalization
+      if (row.productionStatus?.trim()) {
+        const inputStatus = row.productionStatus.trim();
+        const normalized = inputStatus.toLowerCase();
+        
+        // Normalize to correct capitalization
+        let normalizedStatus = null;
+        if (normalized === 'milking') normalizedStatus = 'Milking';
+        else if (normalized === 'non-milking') normalizedStatus = 'Non-Milking';
+        else if (normalized === 'dry') normalizedStatus = 'Dry';
+        
+        if (normalizedStatus) {
+          // Update the row with normalized status
+          row.productionStatus = normalizedStatus;
+        } else {
+          rowErrors.push(`Production Status '${inputStatus}' must be: Milking, Non-Milking, or Dry (exact spelling)`);
+        }
       }
       
       // Duplicate tag number checks
@@ -336,19 +351,19 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       if (!productionStatus) {
         switch (row.category?.trim()) {
           case 'Cow':
-            productionStatus = 'Non-milking'; // Default for adult cows
+            productionStatus = 'Non-Milking'; // Default for adult cows
             break;
           case 'Heifer':
-            productionStatus = 'Non-milking'; // Heifers are not yet milking
+            productionStatus = 'Non-Milking'; // Heifers are not yet milking
             break;
           case 'Calf':
-            productionStatus = 'Non-milking'; // Calves are not milking
+            productionStatus = 'Non-Milking'; // Calves are not milking
             break;
           case 'Bull':
-            productionStatus = 'Non-milking'; // Bulls don't produce milk
+            productionStatus = 'Non-Milking'; // Bulls don't produce milk
             break;
           default:
-            productionStatus = 'Non-milking';
+            productionStatus = 'Non-Milking';
         }
       }
       
@@ -1839,17 +1854,17 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                   <h4 className="font-semibold text-purple-900 mb-3">🥛 Production Status Options</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="font-medium text-purple-800 mb-2">Available options:</p>
+                      <p className="font-medium text-purple-800 mb-2">Available options (EXACT spelling):</p>
                       <ul className="space-y-1 text-purple-700">
                         <li>• <strong>Milking</strong> - Currently producing milk</li>
-                        <li>• <strong>Non-milking</strong> - Not currently milking</li>
+                        <li>• <strong>Non-Milking</strong> - Not currently milking</li>
                         <li>• <strong>Dry</strong> - Dry period between lactations</li>
                       </ul>
                     </div>
                     <div>
                       <p className="font-medium text-purple-800 mb-2">Auto-calculation:</p>
                       <ul className="space-y-1 text-purple-700">
-                        <li>• <strong>If left blank</strong> - Defaults to "Non-milking"</li>
+                        <li>• <strong>If left blank</strong> - Defaults to "Non-Milking"</li>
                         <li>• <strong>Based on category</strong> - Appropriate for animal type</li>
                         <li>• <strong>Can be updated later</strong> - Through individual profiles</li>
                       </ul>
