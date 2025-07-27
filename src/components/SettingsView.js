@@ -30,29 +30,40 @@ import {
 } from 'lucide-react';
 import { generateFarmCode } from '../utils/farmCodeUtils';
 import { createCowRecord, calculateReproductiveStatus } from '../utils/cowDataModel';
+import { useAuth } from '../contexts/AuthContext';
 
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
+  const { user, farmData } = useAuth();
+  
+  console.log('⚙️ SettingsView received initialProfileData:', initialProfileData);
+  console.log('⚙️ SettingsView user email:', user?.email);
+  console.log('⚙️ Auth context user:', user);
+  
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showExportSuccess, setShowExportSuccess] = useState(false);
   const [showImportSuccess, setShowImportSuccess] = useState(false);
 
-  // User Profile State
-  const [profileData, setProfileData] = useState(initialProfileData || {
-    farmName: 'Holstein Pro Farm',
-    ownerName: 'Jason Burianek',
-    farmAddress: '123 Dairy Lane, Farmville, CA 90210',
-    phone: '+1 (555) 123-4567',
-    email: 'jason@holsteinpro.com',
-    operationType: 'Dairy',
-    herdSize: '100-500',
-    yearsInOperation: '15',
-    farmLogo: null,
-    farmCode: null,
-    farmCodeCreated: null,
-    farmCodeLastRegenerated: null
+  // User Profile State - Always use user's email from AuthContext
+  const [profileData, setProfileData] = useState({
+    ...(initialProfileData || {
+      farmName: 'Holstein Pro Farm',
+      ownerName: 'Jason Burianek',
+      farmAddress: '123 Dairy Lane, Farmville, CA 90210',
+      phone: '+1 (555) 123-4567',
+      operationType: 'Dairy',
+      herdSize: '100-500',
+      yearsInOperation: '15',
+      farmLogo: null,
+      farmCode: null,
+      farmCodeCreated: null,
+      farmCodeLastRegenerated: null
+    }),
+    email: user?.email || initialProfileData?.email || 'jason@holsteinpro.com' // Always prioritize user's email
   });
+  
+  console.log('⚙️ SettingsView profileData state:', profileData);
 
   // Farm Code State
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
@@ -496,6 +507,16 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     }
   }, [initialProfileData]);
 
+  // Update email when user data changes (always use current user's email)
+  useEffect(() => {
+    if (user?.email) {
+      setProfileData(prev => ({
+        ...prev,
+        email: user.email
+      }));
+    }
+  }, [user?.email]);
+
   // Save settings to localStorage
   const saveSettings = () => {
     const settings = {
@@ -813,9 +834,12 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                   <input
                     type="email"
                     value={profileData.email}
-                    onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    readOnly
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-600 cursor-not-allowed"
                   />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Email address is managed through your account settings
+                  </p>
                 </div>
 
                 {/* Operation Type */}

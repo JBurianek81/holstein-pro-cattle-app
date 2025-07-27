@@ -14,6 +14,8 @@ import {
 import { 
   createFarm, 
   createUser, 
+  authenticateUser,
+  updateUserFarmCode,
   validateEmail, 
   validatePassword, 
   validateFarmName, 
@@ -101,8 +103,29 @@ const RegisterPage = ({ onNavigate, onRegisterSuccess }) => {
     setErrors({});
 
     try {
-      // Create farm first
-      const farmResult = createFarm({
+      // Step 1: Create user account first (this authenticates the user)
+      const userResult = await createUser({
+        email: formData.email,
+        password: formData.password,
+        name: formData.ownerName,
+        role: 'owner'
+      });
+
+      if (!userResult.success) {
+        setErrors({ submit: userResult.error });
+        return;
+      }
+
+      // Step 2: Auto-login the user immediately
+      const loginResult = await authenticateUser(formData.email, formData.password);
+
+      if (!loginResult.success) {
+        setErrors({ submit: 'Account created but login failed. Please try logging in manually.' });
+        return;
+      }
+
+      // Step 3: Now create farm (user is authenticated)
+      const farmResult = await createFarm({
         farmName: formData.farmName,
         ownerName: formData.ownerName,
         email: formData.email,
@@ -116,18 +139,12 @@ const RegisterPage = ({ onNavigate, onRegisterSuccess }) => {
         return;
       }
 
-      // Create user account
-      const userResult = createUser({
-        email: formData.email,
-        password: formData.password,
-        name: formData.ownerName,
-        farmCode: farmResult.farm.code,
-        role: 'owner'
-      });
-
-      if (!userResult.success) {
-        setErrors({ submit: userResult.error });
-        return;
+      // Step 4: Update user with farm code
+      const updateResult = await updateUserFarmCode(loginResult.user.uid, farmResult.farm.farmCode);
+      
+      if (!updateResult.success) {
+        console.warn('Warning: Failed to update user with farm code:', updateResult.error);
+        // Continue anyway as the farm was created successfully
       }
 
       // Success - move to step 3
@@ -136,8 +153,8 @@ const RegisterPage = ({ onNavigate, onRegisterSuccess }) => {
       // Call success callback after a delay
       setTimeout(() => {
         onRegisterSuccess({
-          user: userResult.user,
-          farm: farmResult.farm
+          user: loginResult.user,
+          farm: loginResult.farm
         });
       }, 2000);
 

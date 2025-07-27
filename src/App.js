@@ -36,19 +36,7 @@ import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBa
 function AppContent() {
   const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData } = useAuth();
   
-  // Helper function to display cow name gracefully
-  const getCowDisplayName = (cow) => {
-    return cow.name?.trim() || `#${cow.tagNumber}`;
-  };
-
-  // Helper function to display cow name with tag number
-  const getCowDisplayNameWithTag = (cow) => {
-    if (cow.name?.trim()) {
-      return `${cow.name} #${cow.tagNumber}`;
-    }
-    return `#${cow.tagNumber}`;
-  };
-
+  // ALL HOOKS FIRST - at the very top
   const [currentView, setCurrentView] = useState('dashboard');
   const [authView, setAuthView] = useState('landing'); // 'landing', 'login', 'register'
 
@@ -95,6 +83,55 @@ function AppContent() {
     farmLogo: null
   });
 
+  // ALL useEffect hooks at the top level
+  // Sync local state with auth context
+  useEffect(() => {
+    console.log('📱 App.js - farmData received:', farmData);
+    console.log('📱 App.js - farm received:', farm);
+    
+    if (farmData) {
+      setCows(farmData.cows || []);
+      setBullInventory(farmData.bullInventory || []);
+      
+      const newProfileData = farmData.profileData || {
+        farmName: farm?.name || 'Holstein Pro Farm',
+        ownerName: farm?.ownerName || 'Jason Burianek',
+        farmAddress: '123 Dairy Lane, Farmville, CA 90210',
+        phone: '+1 (555) 123-4567',
+        email: farm?.ownerEmail || 'jason@holsteinpro.com',
+        operationType: farm?.settings?.operationType || 'Dairy',
+        herdSize: farm?.settings?.herdSize || '100-500',
+        yearsInOperation: farm?.settings?.yearsInOperation || '15',
+        farmLogo: null
+      };
+      
+      console.log('📱 App.js - Setting profileData:', newProfileData);
+      setProfileData(newProfileData);
+      setIsInitialLoadComplete(true);
+    }
+  }, [farmData, farm]);
+
+  // Sync local state changes back to auth context
+  useEffect(() => {
+    if (isInitialLoadComplete && user?.farmCode) {
+      updateCows(cows);
+      updateBullInventory(bullInventory);
+      updateProfileData(profileData);
+    }
+  }, [cows, bullInventory, profileData, isInitialLoadComplete, user?.farmCode, updateCows, updateBullInventory, updateProfileData]);
+
+  // Helper functions
+  const getCowDisplayName = (cow) => {
+    return cow.name?.trim() || `#${cow.tagNumber}`;
+  };
+
+  const getCowDisplayNameWithTag = (cow) => {
+    if (cow.name?.trim()) {
+      return `${cow.name} #${cow.tagNumber}`;
+    }
+    return `#${cow.tagNumber}`;
+  };
+
   // Authentication handlers
   const handleNavigate = (view) => {
     setAuthView(view);
@@ -136,35 +173,6 @@ function AppContent() {
         return <LandingPage onNavigate={handleNavigate} />;
     }
   }
-
-  // Sync local state with auth context
-  useEffect(() => {
-    if (farmData) {
-      setCows(farmData.cows || []);
-      setBullInventory(farmData.bullInventory || []);
-      setProfileData(farmData.profileData || {
-        farmName: farm?.name || 'Holstein Pro Farm',
-        ownerName: farm?.ownerName || 'Jason Burianek',
-        farmAddress: '123 Dairy Lane, Farmville, CA 90210',
-        phone: '+1 (555) 123-4567',
-        email: farm?.ownerEmail || 'jason@holsteinpro.com',
-        operationType: farm?.settings?.operationType || 'Dairy',
-        herdSize: farm?.settings?.herdSize || '100-500',
-        yearsInOperation: farm?.settings?.yearsInOperation || '15',
-        farmLogo: null
-      });
-      setIsInitialLoadComplete(true);
-    }
-  }, [farmData, farm]);
-
-  // Sync local state changes back to auth context
-  useEffect(() => {
-    if (isInitialLoadComplete && user?.farmCode) {
-      updateCows(cows);
-      updateBullInventory(bullInventory);
-      updateProfileData(profileData);
-    }
-  }, [cows, bullInventory, profileData, isInitialLoadComplete, user?.farmCode, updateCows, updateBullInventory, updateProfileData]);
 
   // Generate comprehensive dynamic priority alerts from cow records
   const generatePriorityAlerts = () => {

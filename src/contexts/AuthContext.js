@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 import { 
-  getAuthState, 
-  setAuthState, 
-  clearAuthState,
   getFarmData,
   setFarmData,
+  getFarmByCode,
   logout as logoutUser
 } from '../utils/authUtils';
+import { firebaseAuth } from '../utils/firestoreService';
 
 const AuthContext = createContext();
 
@@ -38,30 +39,73 @@ export const AuthProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Load authentication state on app start
+  // Load authentication state on app start using Firebase Auth
   useEffect(() => {
-    const loadAuthState = () => {
+    const unsubscribe = firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
       try {
-        const authState = getAuthState();
-        if (authState) {
-          setUser(authState.user);
-          setFarm(authState.farm);
+        if (firebaseUser) {
+          // User is signed in - get user data from Firestore
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const userData = userDoc.data();
           
-          // Load farm-specific data
-          if (authState.user?.farmCode) {
-            const data = getFarmData(authState.user.farmCode);
-            setFarmDataState(data);
+          const fullUser = {
+            ...firebaseUser,
+            ...userData,
+            displayName: userData?.name || firebaseUser.displayName
+          };
+          
+          setUser(fullUser);
+          
+          // Load farm-specific data if user has farmCode
+          if (userData?.farmCode) {
+            console.log('🔐 Loading farm data for farmCode:', userData.farmCode);
+            
+            const dataResult = await getFarmData(userData.farmCode);
+            console.log('🔐 Farm data result:', dataResult);
+            
+            if (dataResult.success) {
+              console.log('🔐 Setting farm data state:', dataResult.data);
+              setFarmDataState(dataResult.data);
+            }
+            
+            // Load farm info
+            const farmResult = await getFarmByCode(userData.farmCode);
+            console.log('🔐 Farm info result:', farmResult);
+            
+            if (farmResult.success) {
+              console.log('🔐 Setting farm state:', farmResult.farm);
+              setFarm(farmResult.farm);
+            }
           }
+        } else {
+          // User is signed out
+          setUser(null);
+          setFarm(null);
+          setFarmDataState({
+            cows: [],
+            bullInventory: [],
+            profileData: {
+              farmName: '',
+              ownerName: '',
+              farmAddress: '',
+              phone: '',
+              email: '',
+              operationType: 'Dairy',
+              herdSize: '100-500',
+              yearsInOperation: '1',
+              farmLogo: null
+            }
+          });
         }
       } catch (error) {
         console.error('Error loading auth state:', error);
-        clearAuthState();
       } finally {
         setLoading(false);
       }
-    };
+    });
 
-    loadAuthState();
+    // Cleanup subscription
+    return () => unsubscribe();
   }, []);
 
   // Save farm data when it changes
@@ -71,21 +115,20 @@ export const AuthProvider = ({ children }) => {
     }
   }, [farmData, user?.farmCode]);
 
-  const login = (authData) => {
+  const login = async (authData) => {
     setUser(authData.user);
     setFarm(authData.farm);
     
     // Load farm-specific data
     if (authData.user?.farmCode) {
-      const data = getFarmData(authData.user.farmCode);
-      setFarmDataState(data);
+      const dataResult = await getFarmData(authData.user.farmCode);
+      if (dataResult.success) {
+        setFarmDataState(dataResult.data);
+      }
     }
-    
-    // Save auth state
-    setAuthState(authData);
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     setFarm(null);
     setFarmDataState({
@@ -103,7 +146,7 @@ export const AuthProvider = ({ children }) => {
         farmLogo: null
       }
     });
-    logoutUser();
+    await logoutUser();
   };
 
   const updateFarmData = (newData) => {

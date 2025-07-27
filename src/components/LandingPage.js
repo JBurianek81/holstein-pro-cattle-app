@@ -38,7 +38,7 @@ const LandingPage = ({ onNavigate }) => {
             Welcome to Holstein Pro
           </h2>
           <p className="text-xl text-slate-600 max-w-3xl mx-auto mb-8">
-            The complete cattle management solution for modern dairy farms. 
+            The complete cattle management solution for modern cattle farms. 
             Track your herd, manage breeding, monitor health, and optimize your operation.
           </p>
           
@@ -137,8 +137,8 @@ const LandingPage = ({ onNavigate }) => {
                   <Key className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold">Join Existing Farm</h3>
-                  <p className="text-green-100">Access your team's cattle data</p>
+                  <h3 className="text-2xl font-bold">Join Farm / Login</h3>
+                  <p className="text-green-100">Sign in or join your team's cattle data</p>
                 </div>
               </div>
             </div>
@@ -180,7 +180,7 @@ const LandingPage = ({ onNavigate }) => {
                 onClick={() => onNavigate('login')}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors flex items-center justify-center space-x-2"
               >
-                <span>Join Farm</span>
+                <span>Join Farm / Login</span>
                 <ArrowRight className="w-5 h-5" />
               </button>
             </div>
