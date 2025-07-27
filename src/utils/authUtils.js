@@ -43,7 +43,7 @@ export const setFarms = (farms) => {
 
 export const createFarm = async (farmData) => {
   try {
-    console.log('🏠 Creating farm with data:', farmData);
+    console.log('🏠 STEP 1: Creating farm with data:', farmData);
     
     const farmCode = generateFarmCode();
     
@@ -60,11 +60,11 @@ export const createFarm = async (farmData) => {
       }
     };
     
-    console.log('🏠 New farm object:', newFarm);
+    console.log('🏠 STEP 2: Farm object being saved:', newFarm);
     
     // Create the farm
     const result = await farmService.createFarm(newFarm);
-    console.log('🏠 Farm creation result:', result);
+    console.log('🏠 STEP 3: Farm creation result:', result);
     
     if (result.success) {
       // Create initial farm data with profile information
@@ -84,16 +84,16 @@ export const createFarm = async (farmData) => {
         }
       };
       
-      console.log('🏠 Saving farm data with profile data:', initialFarmData);
+      console.log('🏠 STEP 3.5: Saving farm data with profile data:', initialFarmData);
       
       // Save initial farm data
       const saveResult = await setFarmData(farmCode, initialFarmData);
-      console.log('🏠 Farm data save result:', saveResult);
+      console.log('🏠 STEP 4: Farm data save result:', saveResult);
     }
     
     return result;
   } catch (error) {
-    console.error('Error creating farm:', error);
+    console.error('❌ Error creating farm:', error);
     return { success: false, error: 'Failed to create farm' };
   }
 };
@@ -219,10 +219,12 @@ export const validateOwnerName = (ownerName) => {
  */
 export const getFarmData = async (farmCode) => {
   try {
+    console.log('🔍 DEBUG: Getting farm data for farmCode:', farmCode);
     const result = await farmDataService.getFarmData(farmCode);
+    console.log('🔍 DEBUG: Farm data service result:', result);
     return result;
   } catch (error) {
-    console.error('Error getting farm data:', error);
+    console.error('❌ Error getting farm data:', error);
     return { success: false, error: 'Failed to get farm data' };
   }
 };

@@ -58,24 +58,28 @@ export const AuthProvider = ({ children }) => {
           
           // Load farm-specific data if user has farmCode
           if (userData?.farmCode) {
-            console.log('🔐 Loading farm data for farmCode:', userData.farmCode);
+            console.log('🔐 STEP 4: User authenticated:', fullUser);
+            console.log('🔐 STEP 5: Loading farm data for farmCode:', userData.farmCode);
             
             const dataResult = await getFarmData(userData.farmCode);
-            console.log('🔐 Farm data result:', dataResult);
+            console.log('🔐 STEP 6: Farm data result:', dataResult);
             
             if (dataResult.success) {
-              console.log('🔐 Setting farm data state:', dataResult.data);
+              console.log('🔐 STEP 7: Setting farm data state:', dataResult.data);
+              console.log('🔐 STEP 8: Farm profile data:', dataResult.data?.profileData);
               setFarmDataState(dataResult.data);
             }
             
             // Load farm info
             const farmResult = await getFarmByCode(userData.farmCode);
-            console.log('🔐 Farm info result:', farmResult);
+            console.log('🔐 STEP 9: Farm info result:', farmResult);
             
             if (farmResult.success) {
-              console.log('🔐 Setting farm state:', farmResult.farm);
+              console.log('🔐 STEP 10: Setting farm state:', farmResult.farm);
               setFarm(farmResult.farm);
             }
+          } else {
+            console.log('🔐 STEP 4: User authenticated but no farmCode:', fullUser);
           }
         } else {
           // User is signed out

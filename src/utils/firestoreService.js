@@ -198,10 +198,17 @@ export const farmDataService = {
   // Get farm data
   getFarmData: async (farmCode) => {
     try {
+      console.log('🗄️ DEBUG: Firestore - Getting farm data for farmCode:', farmCode);
       const farmDataDoc = await getDoc(doc(db, COLLECTIONS.FARM_DATA, farmCode));
+      console.log('🗄️ DEBUG: Firestore - Document exists:', farmDataDoc.exists());
+      
       if (farmDataDoc.exists()) {
-        return { success: true, data: farmDataDoc.data() };
+        const data = farmDataDoc.data();
+        console.log('🗄️ DEBUG: Firestore - Retrieved data:', data);
+        console.log('🗄️ DEBUG: Firestore - Profile data in document:', data.profileData);
+        return { success: true, data: data };
       } else {
+        console.log('🗄️ DEBUG: Firestore - Document does not exist, returning default data');
         // Return default empty data structure
         return { 
           success: true, 
@@ -223,7 +230,7 @@ export const farmDataService = {
         };
       }
     } catch (error) {
-      console.error('Error getting farm data:', error);
+      console.error('❌ Error getting farm data:', error);
       return { success: false, error: error.message };
     }
   },
@@ -231,13 +238,19 @@ export const farmDataService = {
   // Update farm data
   updateFarmData: async (farmCode, data) => {
     try {
+      console.log('🗄️ DEBUG: Firestore - Updating farm data for farmCode:', farmCode);
+      console.log('🗄️ DEBUG: Firestore - Data being saved:', data);
+      console.log('🗄️ DEBUG: Firestore - Profile data being saved:', data.profileData);
+      
       await setDoc(doc(db, COLLECTIONS.FARM_DATA, farmCode), {
         ...data,
         updatedAt: serverTimestamp()
       });
+      
+      console.log('🗄️ DEBUG: Firestore - Farm data saved successfully');
       return { success: true };
     } catch (error) {
-      console.error('Error updating farm data:', error);
+      console.error('❌ Error updating farm data:', error);
       return { success: false, error: error.message };
     }
   },

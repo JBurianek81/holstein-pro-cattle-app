@@ -35,9 +35,10 @@ import { useAuth } from '../contexts/AuthContext';
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
   const { user, farmData } = useAuth();
   
-  console.log('⚙️ SettingsView received initialProfileData:', initialProfileData);
-  console.log('⚙️ SettingsView user email:', user?.email);
-  console.log('⚙️ Auth context user:', user);
+  console.log('⚙️ STEP 7: Settings received farmData:', farmData);
+  console.log('⚙️ STEP 8: Settings received initialProfileData:', initialProfileData);
+  console.log('⚙️ STEP 9: User email from auth:', user?.email);
+  console.log('⚙️ STEP 10: Auth context user:', user);
   
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
@@ -62,8 +63,29 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     }),
     email: user?.email || initialProfileData?.email || 'jason@holsteinpro.com' // Always prioritize user's email
   });
+
+  // Update profileData when initialProfileData changes (from AuthContext)
+  useEffect(() => {
+    console.log('⚙️ STEP 12: useEffect triggered - initialProfileData:', initialProfileData);
+    console.log('⚙️ STEP 13: useEffect triggered - user?.email:', user?.email);
+    
+    if (initialProfileData) {
+      console.log('⚙️ STEP 14: Updating profileData from initialProfileData:', initialProfileData);
+      setProfileData(prev => {
+        const updated = {
+          ...prev,
+          ...initialProfileData,
+          email: user?.email || initialProfileData.email // Always keep user's email
+        };
+        console.log('⚙️ STEP 15: New profileData state:', updated);
+        return updated;
+      });
+    } else {
+      console.log('⚙️ STEP 16: initialProfileData is null/undefined, not updating');
+    }
+  }, [initialProfileData, user?.email]);
   
-  console.log('⚙️ SettingsView profileData state:', profileData);
+  console.log('⚙️ STEP 11: Settings profileData state:', profileData);
 
   // Farm Code State
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);

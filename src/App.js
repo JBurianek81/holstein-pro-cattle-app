@@ -93,16 +93,20 @@ function AppContent() {
       setCows(farmData.cows || []);
       setBullInventory(farmData.bullInventory || []);
       
-      const newProfileData = farmData.profileData || {
-        farmName: farm?.name || 'Holstein Pro Farm',
-        ownerName: farm?.ownerName || 'Jason Burianek',
-        farmAddress: '123 Dairy Lane, Farmville, CA 90210',
-        phone: '+1 (555) 123-4567',
-        email: farm?.ownerEmail || 'jason@holsteinpro.com',
-        operationType: farm?.settings?.operationType || 'Dairy',
-        herdSize: farm?.settings?.herdSize || '100-500',
-        yearsInOperation: farm?.settings?.yearsInOperation || '15',
-        farmLogo: null
+      // Use farm data to populate profileData, with fallbacks to existing profileData
+      const newProfileData = {
+        farmName: farm?.name || farmData.profileData?.farmName || '',
+        ownerName: farm?.ownerName || farmData.profileData?.ownerName || '',
+        farmAddress: farmData.profileData?.farmAddress || '',
+        phone: farmData.profileData?.phone || '',
+        email: farm?.ownerEmail || user?.email || farmData.profileData?.email || '',
+        operationType: farm?.settings?.operationType || farmData.profileData?.operationType || 'Dairy',
+        herdSize: farm?.settings?.herdSize || farmData.profileData?.herdSize || '100-500',
+        yearsInOperation: farm?.settings?.yearsInOperation || farmData.profileData?.yearsInOperation || '1',
+        farmLogo: farmData.profileData?.farmLogo || null,
+        farmCode: farmData.profileData?.farmCode || null,
+        farmCodeCreated: farmData.profileData?.farmCodeCreated || null,
+        farmCodeLastRegenerated: farmData.profileData?.farmCodeLastRegenerated || null
       };
       
       console.log('📱 App.js - Setting profileData:', newProfileData);
@@ -1058,12 +1062,15 @@ function AppContent() {
 
           {/* Settings View */}
           {currentView === 'settings' && (
-            <SettingsView 
-              profileData={profileData} 
-              onProfileUpdate={handleProfileUpdate}
-              cows={cows}
-              onUpdateCows={setCows}
-            />
+            <>
+              {console.log('📱 App.js - Rendering SettingsView with profileData:', profileData)}
+              <SettingsView 
+                profileData={profileData} 
+                onProfileUpdate={handleProfileUpdate}
+                cows={cows}
+                onUpdateCows={setCows}
+              />
+            </>
           )}
         </main>
       </div>
