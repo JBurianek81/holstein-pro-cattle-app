@@ -211,6 +211,22 @@ export const farmDataService = {
         console.log('🚨 EMERGENCY: firestoreService - Raw data from Firestore:', data);
         console.log('🚨 EMERGENCY: firestoreService - data.cows:', data.cows);
         console.log('🚨 EMERGENCY: firestoreService - data.bullInventory:', data.bullInventory);
+        
+        // 🐄 CRITICAL DEBUG: Check breeding records in loaded data
+        if (data.cows && Array.isArray(data.cows)) {
+          console.log('🐄 CRITICAL DEBUG: Breeding records in loaded cows:');
+          data.cows.forEach((cow, index) => {
+            console.log(`🐄 Cow ${index + 1} (${cow.name}):`, {
+              name: cow.name,
+              id: cow.id,
+              breedingRecords: cow.breedingRecords?.length || 0,
+              breedingRecordsArray: cow.breedingRecords || [],
+              hasBreedingRecords: !!cow.breedingRecords,
+              cowKeys: Object.keys(cow)
+            });
+          });
+        }
+        
         console.log('🔍 firestoreService DATA STRUCTURE CHECK:', {
           dataKeys: Object.keys(data),
           cowsExists: 'cows' in data,
@@ -256,6 +272,21 @@ export const farmDataService = {
       console.log('🗄️ DEBUG: Firestore - Updating farm data for farmCode:', farmCode);
       console.log('🗄️ DEBUG: Firestore - Data being saved:', data);
       console.log('🗄️ DEBUG: Firestore - Profile data being saved:', data.profileData);
+      
+      // 🐄 CRITICAL DEBUG: Check breeding records being saved
+      if (data.cows && Array.isArray(data.cows)) {
+        console.log('🐄 CRITICAL DEBUG: Breeding records being saved to Firebase:');
+        data.cows.forEach((cow, index) => {
+          console.log(`🐄 Cow ${index + 1} (${cow.name}) being saved:`, {
+            name: cow.name,
+            id: cow.id,
+            breedingRecords: cow.breedingRecords?.length || 0,
+            breedingRecordsArray: cow.breedingRecords || [],
+            hasBreedingRecords: !!cow.breedingRecords,
+            cowKeys: Object.keys(cow)
+          });
+        });
+      }
       
       await setDoc(doc(db, COLLECTIONS.FARM_DATA, farmCode), {
         ...data,

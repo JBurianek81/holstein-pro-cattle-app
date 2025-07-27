@@ -39,6 +39,7 @@ function AppContent() {
   // ALL HOOKS FIRST - at the very top
   const [currentView, setCurrentView] = useState('dashboard');
   const [authView, setAuthView] = useState('landing'); // 'landing', 'login', 'register'
+  const [dashboardFilter, setDashboardFilter] = useState(null);
 
   // Cow management state
   const [cows, setCows] = useState(farmData?.cows || []);
@@ -234,7 +235,34 @@ function AppContent() {
     }
 
     console.log('✅ LOADING: Loading data from Firebase (FIRST TIME ONLY)');
-    setCows(farmData.cows);
+    
+    // 🐄 LOAD COW DETAILS: Debug breeding records being loaded
+    console.log('🐄 LOAD COW DETAILS:', farmData.cows.map(cow => ({
+      name: cow.name,
+      id: cow.id,
+      breedingRecords: cow.breedingRecords?.length || 0,
+      healthRecords: cow.healthRecords?.length || 0,
+      calvingRecords: cow.calvingRecords?.length || 0,
+      hasBreedingData: !!cow.breedingRecords,
+      breedingRecordsArray: cow.breedingRecords || [],
+      fullCow: cow
+    })));
+    
+    // 🐄 LOAD SUMMARY: Total breeding records being loaded
+    const totalBreedingRecordsLoaded = farmData.cows.reduce((total, cow) => 
+      total + (cow.breedingRecords?.length || 0), 0
+    );
+    console.log('🐄 LOAD SUMMARY: Total breeding records being loaded from Firebase:', totalBreedingRecordsLoaded);
+    
+    // Ensure all cows have proper record arrays initialized
+    const cowsWithRecords = farmData.cows.map(cow => ({
+      ...cow,
+      breedingRecords: cow.breedingRecords || [],
+      healthRecords: cow.healthRecords || [],
+      calvingRecords: cow.calvingRecords || []
+    }));
+    
+    setCows(cowsWithRecords);
     setBullInventory(farmData.bullInventory || []);
     
     if (farmData.profileData) {
@@ -888,7 +916,7 @@ function AppContent() {
     setProfileCow(null);
   };
 
-  const handleUpdateCowFromProfile = (updatedCow) => {
+  const handleUpdateCowFromProfile = async (updatedCow) => {
     console.log('🔴 CRITICAL: onUpdateCow called!');
     console.log('🔴 CRITICAL: Updated cow received:', updatedCow);
     console.log('🔴 CRITICAL: Breeding records in updated cow:', updatedCow?.breedingRecords?.length || 0);
@@ -963,6 +991,33 @@ function AppContent() {
       
       return updatedCows;
     });
+
+    // CRITICAL FIX: Save to Firebase after profile update
+    console.log('💾 CRITICAL FIX: Saving profile changes to Firebase');
+    if (user?.farmCode) {
+      try {
+        // Get the updated cows array after the state update
+        const updatedCowsForFirebase = cows.map(cow => 
+          cow.id === updatedCow.id ? cowWithStatus : cow
+        );
+        
+        console.log('💾 CRITICAL FIX: Saving to Firebase with breeding records:', 
+          updatedCowsForFirebase.filter(c => c.breedingRecords?.length > 0).map(c => ({ 
+            name: c.name, 
+            records: c.breedingRecords?.length 
+          }))
+        );
+        
+        const result = await updateCows(updatedCowsForFirebase);
+        if (result && result.success) {
+          console.log('✅ CRITICAL FIX: Profile changes saved to Firebase successfully');
+        } else {
+          console.error('❌ CRITICAL FIX: Failed to save profile changes to Firebase:', result?.error);
+        }
+      } catch (error) {
+        console.error('❌ CRITICAL FIX: Error saving profile changes to Firebase:', error);
+      }
+    }
     
     // Also update the profileCow state to reflect changes immediately
     setProfileCow(cowWithStatus);
@@ -1139,12 +1194,34 @@ function AppContent() {
 
 
   
+
+
+  // Get filtered animals for dashboard
+  const getFilteredDashboardAnimals = () => {
+    switch (dashboardFilter) {
+      case 'total':
+        return cows.filter(cow => !cow.archived);
+      case 'pregnant':
+        return cows.filter(cow => {
+          const reproductiveStatus = calculateReproductiveStatus(cow);
+          return reproductiveStatus === 'PREGNANT' && !cow.archived;
+        });
+      case 'inHeat':
+        return getCowsInHeatToday().filter(cow => !cow.archived);
+      default:
+        return [];
+    }
+  };
+
   // Update metrics based on current cows data
   const updatedMetrics = {
-    total: { value: cows.length },
-    pregnant: { value: cows.filter(cow => cow.status === 'Pregnant' || cow.category === 'Cow').length },
-    breeding: { value: getCowsInHeatToday().length },
-    health: { value: calculateHerdHealthScore(cows) }
+    total: { value: cows.filter(cow => !cow.archived).length },
+    pregnant: { value: cows.filter(cow => {
+      const reproductiveStatus = calculateReproductiveStatus(cow);
+      return reproductiveStatus === 'PREGNANT' && !cow.archived;
+    }).length },
+    breeding: { value: getCowsInHeatToday().filter(cow => !cow.archived).length },
+    health: { value: calculateHerdHealthScore(cows.filter(cow => !cow.archived)) }
   };
 
   // Navigation items with better organization
@@ -1279,7 +1356,12 @@ function AppContent() {
             <div className="space-y-6">
               {/* Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setDashboardFilter(dashboardFilter === 'total' ? null : 'total')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    dashboardFilter === 'total' ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Total Cattle</p>
@@ -1289,9 +1371,14 @@ function AppContent() {
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setDashboardFilter(dashboardFilter === 'pregnant' ? null : 'pregnant')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    dashboardFilter === 'pregnant' ? 'ring-2 ring-green-500 bg-green-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">Pregnant Cows</p>
@@ -1301,9 +1388,14 @@ function AppContent() {
                       <Heart className="w-6 h-6 text-green-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
-                <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <button 
+                  onClick={() => setDashboardFilter(dashboardFilter === 'inHeat' ? null : 'inHeat')}
+                  className={`bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer ${
+                    dashboardFilter === 'inHeat' ? 'ring-2 ring-orange-500 bg-orange-50' : ''
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-slate-600">In Heat</p>
@@ -1313,7 +1405,7 @@ function AppContent() {
                       <Zap className="w-6 h-6 text-orange-600" />
                     </div>
                   </div>
-                </div>
+                </button>
 
                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                   <div className="flex items-center justify-between">
@@ -1329,6 +1421,107 @@ function AppContent() {
                   </div>
                 </div>
               </div>
+
+              {/* Filtered Animals View */}
+              {dashboardFilter && (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="p-6 border-b border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-slate-900">
+                        {dashboardFilter === 'total' && 'All Cattle'}
+                        {dashboardFilter === 'pregnant' && 'Pregnant Cows'}
+                        {dashboardFilter === 'inHeat' && 'Animals in Heat Today'}
+                      </h3>
+                      <button 
+                        onClick={() => setDashboardFilter(null)}
+                        className="text-slate-500 hover:text-slate-700 text-sm font-medium"
+                      >
+                        Clear Filter
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            Animal
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            Tag #
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            Breed
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-slate-200">
+                        {getFilteredDashboardAnimals().map((cow) => (
+                          <tr key={cow.id} className="hover:bg-slate-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-10 w-10">
+                                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                                    <span className="text-sm font-medium text-white">
+                                      {cow.name.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-slate-900">{cow.name}</div>
+                                  <div className="text-sm text-slate-500">{cow.category}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                              {cow.tagNumber}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
+                              {cow.breed}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {dashboardFilter === 'pregnant' && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  Pregnant
+                                </span>
+                              )}
+                              {dashboardFilter === 'inHeat' && (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  In Heat
+                                </span>
+                              )}
+                              {dashboardFilter === 'total' && (
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  calculateReproductiveStatus(cow) === 'PREGNANT' ? 'bg-green-100 text-green-800' :
+                                  calculateReproductiveStatus(cow) === 'BRED' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {calculateReproductiveStatus(cow)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <button
+                                onClick={() => handleViewProfile(cow)}
+                                className="text-blue-600 hover:text-blue-900 font-medium"
+                              >
+                                View Profile
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               {/* Today's Tasks */}
               <TodaysTasks cows={cows} />

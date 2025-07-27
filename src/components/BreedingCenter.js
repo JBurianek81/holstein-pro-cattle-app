@@ -464,6 +464,8 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
 
   // Handle Record Breeding button click
   const handleRecordBreeding = () => {
+    console.log('🏭 BREEDING CENTER: Record Breeding button clicked');
+    console.log('🏭 BREEDING CENTER: Setting showBreedingModal to true');
     setShowBreedingModal(true);
   };
 
@@ -475,13 +477,17 @@ const BreedingCenter = ({ cows, onViewProfile, onUpdateCow, bullInventory, onUpd
 
   // Handle breeding record save - integrates with existing system
   const handleBreedingRecordSave = (selectedCow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
-    console.log('🐄 BreedingCenter: handleBreedingRecordSave called with:', {
-      cow: selectedCow.name,
-      breedingRecord,
-      selectedBullId,
-      isEditing,
-      oldBreedingRecord
-    });
+    console.log('🏭 BREEDING CENTER: Save function called');
+    console.log('🏭 BREEDING CENTER: Selected cow:', selectedCow.name, 'ID:', selectedCow.id);
+    console.log('🏭 BREEDING CENTER: Breeding data received:', breedingRecord);
+    console.log('🏭 BREEDING CENTER: Selected bull ID:', selectedBullId);
+    console.log('🏭 BREEDING CENTER: Is editing:', isEditing);
+    console.log('🏭 BREEDING CENTER: Old breeding record:', oldBreedingRecord);
+    
+    // Find the selected bull in inventory
+    const selectedBull = bullInventory.find(bull => bull.naabCode === selectedBullId);
+    console.log('🏭 BREEDING CENTER: Selected bull data:', selectedBull);
+    console.log('🏭 BREEDING CENTER: Bull dropdown value:', selectedBullId);
 
     // Update the cow's breeding records
     const updatedCow = {

@@ -23,12 +23,14 @@ const BreedingRecordModal = ({
 
   // Initialize form data when modal opens
   useEffect(() => {
+    console.log('🏭 BREEDING MODAL: useEffect triggered, isOpen:', isOpen, 'editingRecord:', editingRecord);
     if (isOpen) {
       const today = new Date();
       const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
       
       if (editingRecord) {
         // Editing existing record
+        console.log('🏭 BREEDING MODAL: Setting up editing record');
         setFormData({
           date: editingRecord.date,
           expectedDueDate: editingRecord.expectedDueDate || calculateDueDate(editingRecord.date),
@@ -40,10 +42,12 @@ const BreedingRecordModal = ({
         // Find and set the bull
         const existingBull = bullInventory.find(bull => bull.naabCode === editingRecord.semenId);
         if (existingBull) {
+          console.log('🏭 BREEDING MODAL: Setting existing bull:', existingBull);
           setSelectedBull(existingBull);
         }
       } else {
         // New record
+        console.log('🏭 BREEDING MODAL: Setting up new record, current selectedBull:', selectedBull);
         setFormData({
           date: todayStr,
           expectedDueDate: calculateDueDate(todayStr),
@@ -51,11 +55,17 @@ const BreedingRecordModal = ({
           notes: ''
         });
         setSelectedCowId(selectedCow?.id || '');
-        setSelectedBull(null);
+        // Only reset selectedBull if it's actually null (not already selected)
+        if (!selectedBull) {
+          console.log('🏭 BREEDING MODAL: Resetting selectedBull to null');
+          setSelectedBull(null);
+        } else {
+          console.log('🏭 BREEDING MODAL: Keeping existing selectedBull:', selectedBull);
+        }
       }
       setErrors({});
     }
-  }, [isOpen, editingRecord, selectedCow, bullInventory]);
+  }, [isOpen, editingRecord, selectedCow]); // Removed bullInventory from dependencies
 
   // Get eligible cows (breeding eligible with OPEN status)
   const getEligibleCows = () => {
@@ -149,9 +159,30 @@ const BreedingRecordModal = ({
     }
   };
 
-  const handleBullSelection = (bullId) => {
-    const bull = bullInventory.find(b => b.id === bullId);
-    setSelectedBull(bull);
+  const handleBullSelection = (bullNaabCode) => {
+    console.log('🐂 BULL DROPDOWN: Bull selected:', bullNaabCode);
+    console.log('🐂 BULL DROPDOWN: Available bulls:', bullInventory.map(b => ({ 
+      name: b.name, 
+      naabCode: b.naabCode, 
+      straws: b.straws 
+    })));
+    
+    const bull = bullInventory.find(b => b.naabCode === bullNaabCode);
+    console.log('🐂 BULL DROPDOWN: Found bull:', bull);
+    console.log('🐂 BULL DROPDOWN: Bull found?', !!bull);
+    
+    if (bull) {
+      console.log('🐂 BULL DROPDOWN: Setting selectedBull to:', bull);
+      setSelectedBull(bull);
+      
+      // Verify state was set
+      setTimeout(() => {
+        console.log('🐂 BULL DROPDOWN: State verification - selectedBull after timeout:', selectedBull);
+      }, 100);
+    } else {
+      console.log('🚨 BULL DROPDOWN ERROR: No bull found with naabCode:', bullNaabCode);
+    }
+    
     if (errors.bullSelection) {
       setErrors(prev => ({ ...prev, bullSelection: '' }));
     }
@@ -179,15 +210,24 @@ const BreedingRecordModal = ({
   };
 
   const handleSave = () => {
+    console.log('🏭 BREEDING MODAL: Save function called');
+    console.log('🏭 BREEDING MODAL: Selected cow ID:', selectedCowId);
+    console.log('🏭 BREEDING MODAL: Selected bull:', selectedBull);
+    console.log('🏭 BREEDING MODAL: Form data:', formData);
+    
     if (!validate()) {
+      console.log('🏭 BREEDING MODAL: Validation failed');
       return;
     }
 
     const selectedCow = cows.find(cow => cow.id === selectedCowId);
     if (!selectedCow) {
+      console.log('🏭 BREEDING MODAL: Selected cow not found');
       alert('Selected cow not found');
       return;
     }
+    
+    console.log('🏭 BREEDING MODAL: Selected cow found:', selectedCow.name);
 
     // Create breeding record data
     const breedingData = {
@@ -201,6 +241,9 @@ const BreedingRecordModal = ({
       notes: formData.notes,
       cost: selectedBull.cost
     };
+
+    console.log('🏭 BREEDING MODAL: Breeding data created:', breedingData);
+    console.log('🏭 BREEDING MODAL: About to call onSave with bull ID:', selectedBull.naabCode);
 
     // Call the parent's save function
     onSave(selectedCow, breedingData, selectedBull.naabCode, !!editingRecord, editingRecord);
@@ -219,6 +262,12 @@ const BreedingRecordModal = ({
     return `#${cow.tagNumber}`;
   };
 
+  console.log('🏭 BREEDING MODAL: Component rendering, selectedBull:', selectedBull, 'isOpen:', isOpen);
+  console.log('🐂 BULL INVENTORY DEBUG: All bulls:', bullInventory.map(bull => ({
+    name: bull.name,
+    naabCode: bull.naabCode,
+    hasId: !!bull.id
+  })));
   if (!isOpen) return null;
 
   return (
@@ -304,20 +353,38 @@ const BreedingRecordModal = ({
               <span>Bull Selection *</span>
             </label>
             <select
-              value={selectedBull?.id || ''}
-              onChange={(e) => handleBullSelection(e.target.value)}
+              value={selectedBull?.naabCode || ''}
+              onChange={(e) => {
+                console.log('🐂 DROPDOWN CHANGE: onChange fired with value:', e.target.value);
+                console.log('🐂 DROPDOWN CHANGE: Event object:', e);
+                handleBullSelection(e.target.value);
+              }}
+              onFocus={() => {
+                console.log('🐂 DROPDOWN FOCUS: Dropdown focused');
+                console.log('🐂 DROPDOWN FOCUS: Current selectedBull:', selectedBull);
+                console.log('🐂 DROPDOWN FOCUS: Bull inventory:', bullInventory.length, 'bulls');
+              }}
+              onClick={() => {
+                console.log('🐂 DROPDOWN CLICK: Dropdown clicked');
+              }}
               className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                 errors.bullSelection ? 'border-red-300' : 'border-slate-300'
               }`}
             >
               <option value="">Select a bull...</option>
               {bullInventory
-                .filter(bull => bull.straws > 0)
-                .map(bull => (
-                  <option key={bull.id} value={bull.id}>
-                    {bull.name} ({bull.naabCode}) - {bull.straws} straws - ${bull.cost}
-                  </option>
-                ))}
+                .filter(bull => {
+                  console.log('🐂 DROPDOWN RENDER: Filtering bull:', bull.name, 'straws:', bull.straws);
+                  return bull.straws > 0;
+                })
+                .map(bull => {
+                  console.log('🐂 DROPDOWN RENDER: Rendering option for bull:', bull.name, 'naabCode:', bull.naabCode);
+                  return (
+                    <option key={bull.naabCode} value={bull.naabCode}>
+                      {bull.name} ({bull.naabCode}) - {bull.straws} straws - ${bull.cost}
+                    </option>
+                  );
+                })}
             </select>
             {errors.bullSelection && (
               <p className="text-red-500 text-sm mt-1">{errors.bullSelection}</p>
