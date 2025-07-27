@@ -789,12 +789,7 @@ function App() {
     });
   };
 
-  // Handle heat filter button click
-  const handleHeatFilter = () => {
-    setCurrentView('herd');
-    // Note: In a real implementation, you would pass a filter state to HerdManagement
-    // For now, we'll just navigate to the herd management view
-  };
+
 
 
   
@@ -1051,34 +1046,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Quick Actions */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white">
-                <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <button 
-                    onClick={handleAddCow}
-                    className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center"
-                  >
-                    <Plus className="w-6 h-6 mx-auto mb-2" />
-                    <span className="text-sm font-medium">Add Cow</span>
-                  </button>
-                  <button 
-                    onClick={handleHeatFilter}
-                    className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center"
-                  >
-                    <Heart className="w-6 h-6 mx-auto mb-2" />
-                    <span className="text-sm font-medium">Heat Filter ({getCowsInHeatToday().length})</span>
-                  </button>
-                  <button className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center">
-                    <Camera className="w-6 h-6 mx-auto mb-2" />
-                    <span className="text-sm font-medium">Take Photo</span>
-                  </button>
-                  <button className="bg-white/20 backdrop-blur-sm rounded-xl p-4 hover:bg-white/30 transition-colors text-center">
-                    <Target className="w-6 h-6 mx-auto mb-2" />
-                    <span className="text-sm font-medium">AI Match</span>
-                  </button>
-                </div>
-              </div>
+
             </div>
           )}
 
@@ -1141,6 +1109,14 @@ function App() {
           )}
         </main>
       </div>
+      
+      {/* Mobile-only floating Add Cow button */}
+      <button
+        onClick={handleAddCow}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center md:hidden z-50"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
       
       {/* Modals */}
       <AddCowModal
