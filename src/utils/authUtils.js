@@ -4,6 +4,8 @@
  */
 
 import { firebaseAuth, farmService, farmDataService, userService, utils } from './firestoreService';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 // Re-export farm code utilities for backward compatibility
 export const generateFarmCode = utils.generateFarmCode;
@@ -115,6 +117,45 @@ export const addMemberToFarm = async (farmCode, userEmail) => {
   } catch (error) {
     console.error('Error adding member to farm:', error);
     return { success: false, error: 'Failed to add member to farm' };
+  }
+};
+
+export const joinFarmByCode = async (farmCode, user) => {
+  try {
+    console.log('🏭 JOIN: User joining farm with code:', farmCode);
+    console.log('🏭 JOIN: User data:', user);
+    
+    const farmRef = doc(db, 'farms', farmCode);
+    const farmSnap = await getDoc(farmRef);
+    
+    if (farmSnap.exists()) {
+      const farmData = farmSnap.data();
+      const newMember = {
+        email: user.email,
+        name: user.displayName || user.email.split('@')[0],
+        joinedDate: new Date().toISOString(),
+        role: 'member'
+      };
+      
+      // Add to members array if not already there
+      const existingMembers = farmData.members || [];
+      const isAlreadyMember = existingMembers.some(member => member.email === user.email);
+      
+      if (!isAlreadyMember) {
+        const updatedMembers = [...existingMembers, newMember];
+        await updateDoc(farmRef, { members: updatedMembers });
+        console.log('👥 JOIN: Added new member to farm:', newMember);
+      } else {
+        console.log('👥 JOIN: User is already a member of this farm');
+      }
+      
+      return { success: true, farm: farmData };
+    } else {
+      return { success: false, error: 'Farm not found' };
+    }
+  } catch (error) {
+    console.error('❌ Error joining farm:', error);
+    return { success: false, error: 'Failed to join farm' };
   }
 };
 

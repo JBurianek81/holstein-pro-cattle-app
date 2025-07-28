@@ -101,23 +101,20 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
 
   // Generate initial farm code if none exists
   const initializeFarmCode = () => {
-    console.log('🏭 FARM CODE: Initializing farm code');
-    console.log('🏭 FARM CODE: Current profileData.farmCode:', profileData.farmCode);
-    console.log('🏭 FARM CODE: User from AuthContext:', user);
-    console.log('🏭 FARM CODE: User farmCode:', user?.farmCode);
+    console.log('🏭 FARM CODE: Checking user role and farm ownership');
+    console.log('🏭 FARM CODE: User email:', user?.email);
+    console.log('🏭 FARM CODE: Farm owner email:', farm?.ownerEmail);
+    console.log('🏭 FARM CODE: Is owner:', user?.email === farm?.ownerEmail);
     
-    // ALWAYS use the farm code from user's farmCode (Firestore document ID) if available
-    if (user?.farmCode) {
-      console.log('🏭 FARM CODE: Forcing update to correct farm code:', user.farmCode);
+    if (farm?.farmCode) {
+      console.log('🏭 FARM CODE: Setting shared farm code:', farm.farmCode);
       const now = new Date().toISOString();
       setProfileData(prev => ({
         ...prev,
-        farmCode: user.farmCode, // Force update to correct Firestore document ID
+        farmCode: farm.farmCode,
         farmCodeCreated: prev.farmCodeCreated || now,
         farmCodeLastRegenerated: now
       }));
-    } else {
-      console.log('🏭 FARM CODE: No farm code available from AuthContext yet');
     }
   };
 
@@ -482,24 +479,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   });
 
   // Worker Management State
-  const [workers, setWorkers] = useState([
-    {
-      id: 1,
-      name: 'Sarah Johnson',
-      email: 'sarah@holsteinpro.com',
-      role: 'Farm Hand',
-      permissions: 'view-only',
-      active: true
-    },
-    {
-      id: 2,
-      name: 'Mike Wilson',
-      email: 'mike@holsteinpro.com',
-      role: 'Veterinarian',
-      permissions: 'full-access',
-      active: true
-    }
-  ]);
+  const [workers, setWorkers] = useState([]);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -543,6 +523,23 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       initializeFarmCode(); // This will force the correct code
     }
   }, [user, profileData.farmCode, initializeFarmCode]);
+
+  // Load real farm members
+  useEffect(() => {
+    if (farm?.members) {
+      const realWorkers = farm.members.map(member => ({
+        id: member.email,
+        name: member.name || 'Unknown',
+        email: member.email,
+        role: member.email === farm.ownerEmail ? 'Owner' : 'Farm Member',
+        permissions: member.email === farm.ownerEmail ? 'full-access' : 'view-only',
+        active: true,
+        joinedDate: member.joinedDate || 'Unknown'
+      }));
+      setWorkers(realWorkers);
+      console.log('👥 WORKERS: Loaded real farm members:', realWorkers);
+    }
+  }, [farm]);
 
   // Save settings to localStorage
   const saveSettings = () => {
@@ -930,7 +927,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Your Farm Code
+                        Farm Code
                       </label>
                       <div className="flex items-center space-x-3">
                         <div className="bg-white px-4 py-3 rounded-lg border border-slate-300 font-mono text-lg font-bold text-slate-900 min-w-[200px]">
@@ -944,6 +941,21 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                           <span>Copy</span>
                         </button>
                       </div>
+                      {/* Owner/Member Status */}
+                      {(() => {
+                        const isOwner = user?.email === farm?.ownerEmail;
+                        return (
+                          <div className="mt-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              isOwner 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {isOwner ? '👑 Farm Owner' : '👥 Farm Member'}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 

@@ -137,6 +137,15 @@ export const AuthProvider = ({ children }) => {
     console.log('🚨 FARM STATE MONITOR: Farm state keys:', farm ? Object.keys(farm) : 'null');
   }, [farm]);
 
+  // 🔄 FARM SYNC: Real-time sync debugging
+  useEffect(() => {
+    if (farm?.farmCode) {
+      console.log('🔄 FARM SYNC: Loading farm data for code:', farm.farmCode);
+      console.log('🔄 FARM SYNC: Current cow count:', farmData?.cows?.length || 0);
+      console.log('🔄 FARM SYNC: Timestamp:', new Date().toISOString());
+    }
+  }, [farm, farmData]);
+
   const login = async (authData) => {
     setUser(authData.user);
     setFarm(authData.farm);
