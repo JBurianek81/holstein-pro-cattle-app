@@ -103,19 +103,20 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   const initializeFarmCode = () => {
     console.log('🏭 FARM CODE: Initializing farm code');
     console.log('🏭 FARM CODE: Current profileData.farmCode:', profileData.farmCode);
-    console.log('🏭 FARM CODE: Farm from AuthContext:', farm);
+    console.log('🏭 FARM CODE: User from AuthContext:', user);
+    console.log('🏭 FARM CODE: User farmCode:', user?.farmCode);
     
-    // Use the actual farm code from AuthContext (Firestore document ID)
-    if (farm?.farmCode && !profileData.farmCode) {
-      console.log('🏭 FARM CODE: Setting farm code from AuthContext:', farm.farmCode);
+    // Use the actual farm code from user's farmCode (Firestore document ID)
+    if (user?.farmCode && !profileData.farmCode) {
+      console.log('🏭 FARM CODE: Setting farm code from user.farmCode:', user.farmCode);
       const now = new Date().toISOString();
       setProfileData(prev => ({
         ...prev,
-        farmCode: farm.farmCode, // Use real Firestore document ID
+        farmCode: user.farmCode, // Use real Firestore document ID
         farmCodeCreated: now,
         farmCodeLastRegenerated: now
       }));
-    } else if (!profileData.farmCode && !farm?.farmCode) {
+    } else if (!profileData.farmCode && !user?.farmCode) {
       console.log('🏭 FARM CODE: No farm code available yet');
     }
   };
@@ -511,11 +512,11 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       setAppPreferences(settings.app || appPreferences);
     }
     
-    // Initialize farm code when farm data is available
-    if (farm?.farmCode) {
+    // Initialize farm code when user data is available
+    if (user?.farmCode) {
       initializeFarmCode();
     }
-  }, [farm]); // Depend on farm data from AuthContext
+  }, [user]); // Depend on user data from AuthContext
 
   // Update local profileData when prop changes
   useEffect(() => {
