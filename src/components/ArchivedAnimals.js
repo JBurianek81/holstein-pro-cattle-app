@@ -3,12 +3,15 @@ import { Users, Search, RotateCcw, Trash2, MoreVertical, Tag, Calendar, Download
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge } from '../utils/cowDataModel';
 import { useState } from 'react';
 
-const ArchivedAnimals = ({ archivedCows, onRestoreCow, onPermanentlyDeleteCow, onViewProfile }) => {
+const ArchivedAnimals = ({ cows = [], onRestoreCow, onPermanentlyDeleteCow, onViewProfile }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
   const [selectedCows, setSelectedCows] = useState(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [cowToDelete, setCowToDelete] = useState(null);
+
+  // Filter archived cows from the main cows array
+  const archivedCows = cows.filter(cow => cow && cow.archived === true);
 
   // Helper function to display cow name gracefully
   const getDisplayName = (cow) => {
@@ -25,9 +28,9 @@ const ArchivedAnimals = ({ archivedCows, onRestoreCow, onPermanentlyDeleteCow, o
 
   // Filter archived cows based on search and active filter
   const filteredCows = archivedCows.filter(cow => {
-    const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (cow.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                         (cow.tagNumber?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                         (cow.breed?.toLowerCase() || '').includes(searchTerm.toLowerCase());
     
     let matchesFilter = true;
     switch (activeFilter) {
@@ -110,7 +113,7 @@ const ArchivedAnimals = ({ archivedCows, onRestoreCow, onPermanentlyDeleteCow, o
   };
 
   const handleBulkExport = () => {
-    const selectedCowsData = archivedCows.filter(cow => selectedCows.has(cow.id));
+    const selectedCowsData = archivedCows.filter(cow => cow && selectedCows.has(cow.id));
     
     // Convert to CSV format
     const headers = ['Name', 'Tag Number', 'Breed', 'Category', 'Gender', 'Status', 'Production Status', 'Date of Birth', 'Age', 'Archive Date', 'Archive Reason', 'Notes'];
@@ -471,7 +474,7 @@ const ArchivedAnimals = ({ archivedCows, onRestoreCow, onPermanentlyDeleteCow, o
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-red-700 font-medium mb-2">Animals to be permanently deleted:</p>
               <div className="max-h-20 overflow-y-auto">
-                {archivedCows.filter(cow => selectedCows.has(cow.id)).map(cow => (
+                {archivedCows.filter(cow => cow && selectedCows.has(cow.id)).map(cow => (
                   <p key={cow.id} className="text-sm text-red-600">
                     {getDisplayNameWithTag(cow)}
                   </p>

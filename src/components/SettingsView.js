@@ -28,17 +28,18 @@ import {
   CheckCircle,
   X
 } from 'lucide-react';
-import { generateFarmCode } from '../utils/farmCodeUtils';
+
 import { createCowRecord, calculateReproductiveStatus } from '../utils/cowDataModel';
 import { useAuth } from '../contexts/AuthContext';
 
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
-  const { user, farmData } = useAuth();
+  const { user, farmData, farm } = useAuth();
   
   console.log('⚙️ STEP 7: Settings received farmData:', farmData);
   console.log('⚙️ STEP 8: Settings received initialProfileData:', initialProfileData);
   console.log('⚙️ STEP 9: User email from auth:', user?.email);
   console.log('⚙️ STEP 10: Auth context user:', user);
+  console.log('🏭 FARM CODE: Farm from AuthContext:', farm);
   
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +89,6 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   console.log('⚙️ STEP 11: Settings profileData state:', profileData);
 
   // Farm Code State
-  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [showCopySuccess, setShowCopySuccess] = useState(false);
 
   // Bulk Import State
@@ -99,32 +99,25 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   const [importedCount, setImportedCount] = useState(0);
   const [showTemplateInstructions, setShowTemplateInstructions] = useState(false);
 
-
-
   // Generate initial farm code if none exists
   const initializeFarmCode = () => {
-    if (!profileData.farmCode) {
-      const newCode = generateFarmCode();
+    console.log('🏭 FARM CODE: Initializing farm code');
+    console.log('🏭 FARM CODE: Current profileData.farmCode:', profileData.farmCode);
+    console.log('🏭 FARM CODE: Farm from AuthContext:', farm);
+    
+    // Use the actual farm code from AuthContext (Firestore document ID)
+    if (farm?.farmCode && !profileData.farmCode) {
+      console.log('🏭 FARM CODE: Setting farm code from AuthContext:', farm.farmCode);
       const now = new Date().toISOString();
       setProfileData(prev => ({
         ...prev,
-        farmCode: newCode,
+        farmCode: farm.farmCode, // Use real Firestore document ID
         farmCodeCreated: now,
         farmCodeLastRegenerated: now
       }));
+    } else if (!profileData.farmCode && !farm?.farmCode) {
+      console.log('🏭 FARM CODE: No farm code available yet');
     }
-  };
-
-  // Regenerate farm code
-  const regenerateFarmCode = () => {
-    const newCode = generateFarmCode();
-    const now = new Date().toISOString();
-    setProfileData(prev => ({
-      ...prev,
-      farmCode: newCode,
-      farmCodeLastRegenerated: now
-    }));
-    setShowRegenerateConfirm(false);
   };
 
   // Copy farm code to clipboard
@@ -145,6 +138,8 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       setTimeout(() => setShowCopySuccess(false), 2000);
     }
   };
+
+
 
   // Show template instructions
   const showTemplateInstructionsModal = () => {
@@ -516,11 +511,11 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       setAppPreferences(settings.app || appPreferences);
     }
     
-    // Initialize farm code if none exists
-    setTimeout(() => {
+    // Initialize farm code when farm data is available
+    if (farm?.farmCode) {
       initializeFarmCode();
-    }, 100);
-  }, []);
+    }
+  }, [farm]); // Depend on farm data from AuthContext
 
   // Update local profileData when prop changes
   useEffect(() => {
@@ -929,7 +924,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                       </label>
                       <div className="flex items-center space-x-3">
                         <div className="bg-white px-4 py-3 rounded-lg border border-slate-300 font-mono text-lg font-bold text-slate-900 min-w-[200px]">
-                          {profileData.farmCode || 'Generating...'}
+                          {profileData.farmCode || 'Loading...'}
                         </div>
                         <button
                           onClick={copyFarmCode}
@@ -937,13 +932,6 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                         >
                           <ExternalLink className="w-4 h-4" />
                           <span>Copy</span>
-                        </button>
-                        <button
-                          onClick={() => setShowRegenerateConfirm(true)}
-                          className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
-                        >
-                          <Key className="w-4 h-4" />
-                          <span>Regenerate</span>
                         </button>
                       </div>
                     </div>
@@ -970,12 +958,12 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                   </div>
 
                   {/* Security Note */}
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <div className="flex items-start space-x-2">
-                      <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-yellow-800">
-                        <p className="font-medium">Security Note:</p>
-                        <p>Keep this code secure. Anyone with this code can access your farm data. Only share with trusted farm members.</p>
+                      <Shield className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium">Farm Code Information:</p>
+                        <p>This code is tied to your farm's database record and cannot be changed. Only share with trusted farm members.</p>
                       </div>
                     </div>
                   </div>
@@ -1625,34 +1613,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         </div>
       )}
 
-      {/* Regenerate Farm Code Confirmation Modal */}
-      {showRegenerateConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
-            <div className="flex items-center space-x-3 mb-4">
-              <Key className="w-6 h-6 text-orange-600" />
-              <h3 className="text-lg font-semibold text-slate-900">Regenerate Farm Code</h3>
-            </div>
-            <p className="text-slate-600 mb-6">
-              This will generate a new farm access code. The old code will no longer work. Make sure to share the new code with your farm members.
-            </p>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => setShowRegenerateConfirm(false)}
-                className="flex-1 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={regenerateFarmCode}
-                className="flex-1 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-              >
-                Regenerate Code
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Bulk Import Preview Modal */}
       {showImportPreview && (
