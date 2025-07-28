@@ -106,18 +106,18 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     console.log('🏭 FARM CODE: User from AuthContext:', user);
     console.log('🏭 FARM CODE: User farmCode:', user?.farmCode);
     
-    // Use the actual farm code from user's farmCode (Firestore document ID)
-    if (user?.farmCode && !profileData.farmCode) {
-      console.log('🏭 FARM CODE: Setting farm code from user.farmCode:', user.farmCode);
+    // ALWAYS use the farm code from user's farmCode (Firestore document ID) if available
+    if (user?.farmCode) {
+      console.log('🏭 FARM CODE: Forcing update to correct farm code:', user.farmCode);
       const now = new Date().toISOString();
       setProfileData(prev => ({
         ...prev,
-        farmCode: user.farmCode, // Use real Firestore document ID
-        farmCodeCreated: now,
+        farmCode: user.farmCode, // Force update to correct Firestore document ID
+        farmCodeCreated: prev.farmCodeCreated || now,
         farmCodeLastRegenerated: now
       }));
-    } else if (!profileData.farmCode && !user?.farmCode) {
-      console.log('🏭 FARM CODE: No farm code available yet');
+    } else {
+      console.log('🏭 FARM CODE: No farm code available from AuthContext yet');
     }
   };
 
@@ -534,6 +534,15 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       }));
     }
   }, [user?.email]);
+
+  // One-time cleanup of wrong farm codes
+  useEffect(() => {
+    // One-time cleanup of wrong farm codes
+    if (profileData.farmCode && profileData.farmCode.startsWith('FARM-') && user?.farmCode) {
+      console.log('🧹 CLEANUP: Removing old wrong farm code:', profileData.farmCode);
+      initializeFarmCode(); // This will force the correct code
+    }
+  }, [user, profileData.farmCode]);
 
   // Save settings to localStorage
   const saveSettings = () => {
