@@ -31,6 +31,8 @@ import {
 
 import { createCowRecord, calculateReproductiveStatus } from '../utils/cowDataModel';
 import { useAuth } from '../contexts/AuthContext';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
   const { user, farmData, farm } = useAuth();
@@ -480,6 +482,10 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
 
   // Worker Management State
   const [workers, setWorkers] = useState([]);
+  const [showWorkerSettings, setShowWorkerSettings] = useState(false);
+  const [editingWorker, setEditingWorker] = useState(null);
+  const [workerToRemove, setWorkerToRemove] = useState(null);
+  const [showRemoveWorkerConfirm, setShowRemoveWorkerConfirm] = useState(false);
 
   // Load settings from localStorage
   useEffect(() => {
@@ -681,6 +687,65 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     } catch (error) {
       console.error('❌ Error restoring from backup:', error);
       alert('Error restoring from backup');
+    }
+  };
+
+  // Worker Management Functions
+  const handleEditWorker = (worker) => {
+    console.log('👥 EDIT: Opening settings for worker:', worker.email);
+    setEditingWorker(worker);
+    setShowWorkerSettings(true);
+  };
+
+  const handleUpdateWorkerPermissions = async (workerId, newPermissions) => {
+    console.log('👥 UPDATE: Updating permissions for:', workerId, 'to:', newPermissions);
+    
+    try {
+      // Update in Firestore
+      const farmRef = doc(db, 'farms', farm.farmCode);
+      const updatedMembers = farm.members.map(member => 
+        member.email === workerId 
+          ? { ...member, permissions: newPermissions, role: newPermissions === 'full-access' ? 'Manager' : 'Farm Hand' }
+          : member
+      );
+      
+      await updateDoc(farmRef, { members: updatedMembers });
+      
+      // Update local state
+      setWorkers(prev => prev.map(worker => 
+        worker.id === workerId 
+          ? { ...worker, permissions: newPermissions, role: newPermissions === 'full-access' ? 'Manager' : 'Farm Hand' }
+          : worker
+      ));
+      
+      console.log('✅ PERMISSIONS: Updated successfully');
+      setShowWorkerSettings(false);
+      setEditingWorker(null);
+    } catch (error) {
+      console.error('❌ ERROR: Failed to update permissions:', error);
+      alert('Failed to update worker permissions');
+    }
+  };
+
+  const handleRemoveWorker = async (workerEmail) => {
+    console.log('👥 REMOVE: Removing worker:', workerEmail);
+    
+    try {
+      // Remove from Firestore
+      const farmRef = doc(db, 'farms', farm.farmCode);
+      const updatedMembers = farm.members.filter(member => member.email !== workerEmail);
+      
+      await updateDoc(farmRef, { members: updatedMembers });
+      
+      // Update local state
+      setWorkers(prev => prev.filter(worker => worker.id !== workerEmail));
+      
+      console.log('✅ REMOVED: Worker removed successfully');
+      setShowRemoveWorkerConfirm(false);
+      setWorkerToRemove(null);
+    } catch (error) {
+      console.error('❌ ERROR: Failed to remove worker:', error);
+      alert('Failed to remove worker');
     }
   };
 
@@ -1593,9 +1658,18 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                         }`}>
                           {worker.permissions === 'full-access' ? 'Full Access' : 'View Only'}
                         </span>
-                        <button className="text-slate-400 hover:text-slate-600">
-                          <Settings className="w-4 h-4" />
-                        </button>
+                        {(() => {
+                          const isOwner = user?.email === farm?.ownerEmail;
+                          return isOwner && (
+                            <button 
+                              onClick={() => handleEditWorker(worker)}
+                              className="text-slate-400 hover:text-slate-600 transition-colors"
+                              title="Edit worker permissions"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </button>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1936,6 +2010,126 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Worker Settings Modal */}
+      {showWorkerSettings && editingWorker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Worker Settings</h3>
+              <button
+                onClick={() => {
+                  setShowWorkerSettings(false);
+                  setEditingWorker(null);
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="font-medium text-slate-900">{editingWorker.name}</p>
+                <p className="text-sm text-slate-600">{editingWorker.email}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Permission Level
+                </label>
+                <select
+                  value={editingWorker.permissions}
+                  onChange={(e) => setEditingWorker(prev => ({ ...prev, permissions: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="view-only">View Only - Can see data but not edit</option>
+                  <option value="limited-edit">Limited Edit - Can add records but not delete</option>
+                  <option value="full-access">Full Access - Can edit and delete everything</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Role Title
+                </label>
+                <select
+                  value={editingWorker.role}
+                  onChange={(e) => setEditingWorker(prev => ({ ...prev, role: e.target.value }))}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="Farm Hand">Farm Hand</option>
+                  <option value="Manager">Manager</option>
+                  <option value="Veterinarian">Veterinarian</option>
+                  <option value="Supervisor">Supervisor</option>
+                  <option value="Intern">Intern</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setWorkerToRemove(editingWorker);
+                  setShowRemoveWorkerConfirm(true);
+                }}
+                className="text-red-600 hover:text-red-700 text-sm font-medium"
+              >
+                Remove from Farm
+              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setShowWorkerSettings(false);
+                    setEditingWorker(null);
+                  }}
+                  className="px-4 py-2 text-slate-600 hover:text-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleUpdateWorkerPermissions(editingWorker.id, editingWorker.permissions)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Worker Confirmation */}
+      {showRemoveWorkerConfirm && workerToRemove && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center space-x-3 mb-4">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+              <h3 className="text-lg font-semibold text-slate-900">Remove Worker</h3>
+            </div>
+            <p className="text-slate-600 mb-6">
+              Remove <strong>{workerToRemove.name}</strong> from your farm? They will lose access to all farm data.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowRemoveWorkerConfirm(false);
+                  setWorkerToRemove(null);
+                }}
+                className="flex-1 bg-slate-100 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemoveWorker(workerToRemove.id)}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              >
+                Remove Worker
+              </button>
             </div>
           </div>
         </div>
