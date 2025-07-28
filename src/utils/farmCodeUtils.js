@@ -3,22 +3,20 @@
  * Functions for generating, validating, and managing farm access codes
  */
 
-// Farm code format: FARM-XXXXXX (where X is alphanumeric)
-const FARM_CODE_PREFIX = 'FARM-';
+// Farm code format: XXXXXX (where X is alphanumeric) - Firestore document ID
 const FARM_CODE_LENGTH = 6;
 const FARM_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 /**
  * Generate a new farm access code
- * @returns {string} Farm code in format FARM-XXXXXX
+ * @returns {string} Farm code in format XXXXXX (Firestore document ID)
  */
 export const generateFarmCode = () => {
-  const prefix = FARM_CODE_PREFIX;
   let code = '';
   for (let i = 0; i < FARM_CODE_LENGTH; i++) {
     code += FARM_CODE_CHARS.charAt(Math.floor(Math.random() * FARM_CODE_CHARS.length));
   }
-  return prefix + code;
+  return code;
 };
 
 /**
@@ -31,21 +29,15 @@ export const validateFarmCode = (code) => {
     return false;
   }
   
-  // Check prefix
-  if (!code.startsWith(FARM_CODE_PREFIX)) {
+  // Check length (6 characters)
+  if (code.length !== FARM_CODE_LENGTH) {
     return false;
   }
   
-  // Check length (prefix + 6 characters)
-  if (code.length !== FARM_CODE_PREFIX.length + FARM_CODE_LENGTH) {
-    return false;
-  }
-  
-  // Check that all characters after prefix are valid
-  const codePart = code.substring(FARM_CODE_PREFIX.length);
+  // Check that all characters are valid
   const validChars = new Set(FARM_CODE_CHARS.split(''));
   
-  for (let char of codePart) {
+  for (let char of code) {
     if (!validChars.has(char)) {
       return false;
     }
@@ -64,8 +56,8 @@ export const formatFarmCode = (code) => {
     return code; // Return original if invalid
   }
   
-  // Add space after prefix for readability: FARM-XXXXXX -> FARM- XXXXXX
-  return code.replace(FARM_CODE_PREFIX, FARM_CODE_PREFIX + ' ');
+  // Add spacing for readability: XXXXXX -> XXX XXX
+  return code.replace(/(.{3})/g, '$1 ').trim();
 };
 
 /**
@@ -76,10 +68,9 @@ export const formatFarmCode = (code) => {
 export const getFarmCodeMetadata = (code) => {
   return {
     isValid: validateFarmCode(code),
-    prefix: FARM_CODE_PREFIX,
     length: code ? code.length : 0,
-    expectedLength: FARM_CODE_PREFIX.length + FARM_CODE_LENGTH,
-    format: 'FARM-XXXXXX'
+    expectedLength: FARM_CODE_LENGTH,
+    format: 'XXXXXX'
   };
 };
 

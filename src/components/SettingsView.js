@@ -542,7 +542,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       console.log('🧹 CLEANUP: Removing old wrong farm code:', profileData.farmCode);
       initializeFarmCode(); // This will force the correct code
     }
-  }, [user, profileData.farmCode]);
+  }, [user, profileData.farmCode, initializeFarmCode]);
 
   // Save settings to localStorage
   const saveSettings = () => {

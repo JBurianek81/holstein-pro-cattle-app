@@ -64,7 +64,7 @@ const LoginPage = ({ onNavigate, onLoginSuccess }) => {
     const newErrors = {};
 
     if (!validateFarmCode(formData.farmCode)) {
-      newErrors.farmCode = 'Please enter a valid farm code (format: FARM-XXXXXX)';
+      newErrors.farmCode = 'Please enter a valid farm code (6 characters: letters and numbers)';
     }
 
     setErrors(newErrors);
@@ -309,7 +309,7 @@ const LoginPage = ({ onNavigate, onLoginSuccess }) => {
             className={`w-full pl-10 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${
               errors.farmCode ? 'border-red-300' : 'border-slate-300'
             }`}
-            placeholder="FARM-XXXXXX"
+            placeholder="Enter farm code"
           />
         </div>
         {errors.farmCode && (

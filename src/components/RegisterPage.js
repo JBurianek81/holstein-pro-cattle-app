@@ -422,7 +422,7 @@ const RegisterPage = ({ onNavigate, onRegisterSuccess }) => {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
         <h4 className="font-semibold text-blue-900 mb-2">Your Farm Code</h4>
         <p className="text-blue-800 font-mono text-lg">
-          {formData.farmCode || 'FARM-XXXXXX'}
+          {formData.farmCode || 'Loading...'}
         </p>
         <p className="text-blue-700 text-sm mt-2">
           Share this code with team members to give them access to your farm.
