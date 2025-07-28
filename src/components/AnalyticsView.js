@@ -58,201 +58,57 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       (cow.breedingRecords || []).filter(record => new Date(record.date) >= startDate)
     );
 
-    const calvingRecords = relevantCows.flatMap(cow => 
-      (cow.calvingRecords || []).filter(record => new Date(record.date) >= startDate)
+    // Count confirmed pregnancies for success rate calculation
+    const confirmedPregnancies = relevantCows.flatMap(cow => 
+      (cow.healthRecords || []).filter(healthRecord => {
+        if (healthRecord.type !== 'Pregnancy Check') return false;
+        
+        const checkDate = new Date(healthRecord.date);
+        const description = (healthRecord.description || '').toLowerCase();
+        
+        const isInPeriod = checkDate >= startDate;
+        const isPositive = description.includes('positive') || 
+                          description.includes('confirmed positive') ||
+                          description.includes('pregnant') ||
+                          description.includes('pregnancy confirmed');
+        
+        return isInPeriod && isPositive;
+      })
     );
 
     const breedingSuccessRate = breedingRecords.length > 0 
-      ? Math.round((calvingRecords.length / breedingRecords.length) * 100) 
+      ? Math.round((confirmedPregnancies.length / breedingRecords.length) * 100) 
       : 0;
 
-    // Bull Performance Analysis
-    console.log('🔍 DEBUG: Starting Bull Performance Analysis');
-    console.log('🔍 DEBUG: Total breeding records found:', breedingRecords.length);
-    console.log('🔍 DEBUG: Bull inventory count:', bullInventory.length);
-    console.log('🔍 DEBUG: Bull inventory data:', bullInventory);
-    
+    // Bull Usage Analysis - Simple tracking without success rate complexity
     const bullPerformance = {};
-    breedingRecords.forEach((record, index) => {
-      console.log(`🔍 DEBUG: Processing breeding record ${index + 1}:`, {
-        recordId: record.id,
-        cowId: record.cowId,
-        date: record.date,
-        semenId: record.semenId,
-        bullName: record.bullName,
-        method: record.method,
-        notes: record.notes,
-        fullRecord: record
-      });
-      
+    breedingRecords.forEach((record) => {
       const bullId = record.semenId || record.bullName;
-      console.log(`🔍 DEBUG: Bull identifier extracted: "${bullId}" (from semenId: "${record.semenId}" or bullName: "${record.bullName}")`);
       
       if (bullId) {
         if (!bullPerformance[bullId]) {
-          bullPerformance[bullId] = { total: 0, successful: 0, cost: 0, displayName: record.bullName || bullId };
-          console.log(`🔍 DEBUG: Created new bull performance entry for: "${bullId}"`);
+          bullPerformance[bullId] = { 
+            total: 0, 
+            cost: 0, 
+            displayName: record.bullName || bullId 
+          };
         }
         bullPerformance[bullId].total++;
-        console.log(`🔍 DEBUG: Incremented total breedings for "${bullId}" to ${bullPerformance[bullId].total}`);
         
-        // Check if this breeding resulted in a calf
-        const hasCalf = calvingRecords.some(calving => 
-          calving.motherId === record.cowId && 
-          new Date(calving.date) > new Date(record.date)
-        );
-        console.log(`🔍 DEBUG: Calf check for cow ${record.cowId}:`, {
-          hasCalf,
-          calvingRecordsCount: calvingRecords.length,
-          relevantCalvings: calvingRecords.filter(calving => calving.motherId === record.cowId)
-        });
-        
-        // Check if this breeding resulted in a positive pregnancy check
-        console.log(`🔍 DEBUG: Cow lookup for breeding record ${index + 1}:`, {
-          recordCowId: record.cowId,
-          availableCowIds: cows.map(c => c.id),
-          availableCowNames: cows.map(c => c.name),
-          availableCowTags: cows.map(c => c.tagNumber)
-        });
-        
-        let cow = cows.find(c => c.id === record.cowId);
-        console.log(`🔍 DEBUG: Match by exact ID "${record.cowId}":`, cow ? `FOUND - ${cow.name}` : 'NOT FOUND');
-        
-        if (!cow) {
-          cow = cows.find(c => c.tagNumber === record.cowId);
-          console.log(`🔍 DEBUG: Match by tagNumber "${record.cowId}":`, cow ? `FOUND - ${cow.name}` : 'NOT FOUND');
-        }
-        if (!cow) {
-          cow = cows.find(c => c.name === record.cowId);
-          console.log(`🔍 DEBUG: Match by name "${record.cowId}":`, cow ? `FOUND - ${cow.name}` : 'NOT FOUND');
-        }
-        
-        const cowHealthRecords = cow?.healthRecords || [];
-        console.log(`🔍 DEBUG: Pregnancy check for cow ${record.cowId}:`, {
-          cowFound: !!cow,
-          cowName: cow?.name || 'NOT FOUND',
-          healthRecordsCount: cowHealthRecords.length,
-          pregnancyCheckRecords: cowHealthRecords.filter(hr => hr.type === 'Pregnancy Check')
-        });
-        
-        const hasPositivePregnancyCheck = cowHealthRecords.some(healthRecord => {
-          if (healthRecord.type !== 'Pregnancy Check') return false;
-          
-          const checkDate = new Date(healthRecord.date);
-          const breedingDate = new Date(record.date);
-          const description = (healthRecord.description || '').toLowerCase();
-          
-          const isAfterBreeding = checkDate > breedingDate;
-          
-          // Expanded positive pregnancy keywords
-          const isPositive = description.includes('positive') || 
-                            description.includes('confirmed positive') ||
-                            description.includes('pregnant') ||
-                            description.includes('bred') ||
-                            description.includes('confirmed') ||
-                            description.includes('yes') ||
-                            description.includes('preg') ||
-                            description.includes('+') ||
-                            description.includes('successful') ||
-                            description.includes('conceived');
-          
-          console.log(`🔍 DEBUG: Pregnancy check analysis for "${bullId}":`, {
-            checkDate: healthRecord.date,
-            breedingDate: record.date,
-            isAfterBreeding,
-            description: healthRecord.description,
-            descriptionLower: description,
-            isPositive,
-            positiveKeywordsFound: [
-              description.includes('positive') && 'positive',
-              description.includes('confirmed positive') && 'confirmed positive',
-              description.includes('pregnant') && 'pregnant',
-              description.includes('bred') && 'bred',
-              description.includes('confirmed') && 'confirmed',
-              description.includes('yes') && 'yes',
-              description.includes('preg') && 'preg',
-              description.includes('+') && '+',
-              description.includes('successful') && 'successful',
-              description.includes('conceived') && 'conceived'
-            ].filter(Boolean),
-            finalResult: isAfterBreeding && isPositive
-          });
-          
-          // Must be after this breeding date and contain positive indicators
-          return isAfterBreeding && isPositive;
-        });
-        
-        console.log(`🔍 DEBUG: Pregnancy detection results for "${bullId}":`, {
-          hasCalf,
-          hasPositivePregnancyCheck,
-          finalSuccess: hasCalf || hasPositivePregnancyCheck
-        });
-        
-        if (hasCalf || hasPositivePregnancyCheck) {
-          bullPerformance[bullId].successful++;
-          console.log(`🔍 DEBUG: Incremented successful breedings for "${bullId}" to ${bullPerformance[bullId].successful}`);
-        }
-        
-        // Add cost if bull is in inventory - try multiple matching strategies
-        console.log(`🔍 DEBUG: Attempting to match bull "${bullId}" to inventory...`);
-        
-        let bull = bullInventory.find(b => b.naabCode === bullId);
-        console.log(`🔍 DEBUG: Match by naabCode "${bullId}":`, bull ? `FOUND - ${bull.name}` : 'NOT FOUND');
-        
-        if (!bull) {
-          // Try matching by name
-          bull = bullInventory.find(b => b.name === record.bullName);
-          console.log(`🔍 DEBUG: Match by exact name "${record.bullName}":`, bull ? `FOUND - ${bull.name}` : 'NOT FOUND');
-        }
-        if (!bull) {
-          // Try matching by name with case insensitive
-          bull = bullInventory.find(b => b.name.toLowerCase() === (record.bullName || '').toLowerCase());
-          console.log(`🔍 DEBUG: Match by case-insensitive name "${record.bullName}":`, bull ? `FOUND - ${bull.name}` : 'NOT FOUND');
-        }
-        
+        // Add cost from inventory
+        const bull = bullInventory.find(b => b.naabCode === bullId || b.name === record.bullName);
         if (bull) {
           bullPerformance[bullId].cost += bull.cost;
-          console.log(`🔍 DEBUG: Added cost $${bull.cost} for "${bullId}" (matched to "${bull.name}"), total cost now: $${bullPerformance[bullId].cost}`);
-        } else {
-          console.log(`🔍 DEBUG: NO BULL MATCH FOUND for "${bullId}" - no cost added`);
-          console.log(`🔍 DEBUG: Available bull inventory names:`, bullInventory.map(b => b.name));
-          console.log(`🔍 DEBUG: Available bull inventory NAAB codes:`, bullInventory.map(b => b.naabCode));
         }
-      } else {
-        console.log(`🔍 DEBUG: No bull identifier found for breeding record ${index + 1}`);
       }
     });
 
-    // Calculate success rates and cost per pregnancy for each bull
-    console.log(`🔍 DEBUG: Calculating final metrics for ${Object.keys(bullPerformance).length} bulls`);
-    Object.keys(bullPerformance).forEach(bullId => {
-      const bull = bullPerformance[bullId];
-      bull.successRate = bull.total > 0 ? Math.round((bull.successful / bull.total) * 100) : 0;
-      bull.costPerPregnancy = bull.successful > 0 ? Math.round(bull.cost / bull.successful) : 0;
-      
-      console.log(`🔍 DEBUG: Final metrics for "${bullId}":`, {
-        displayName: bull.displayName,
-        total: bull.total,
-        successful: bull.successful,
-        successRate: bull.successRate,
-        cost: bull.cost,
-        costPerPregnancy: bull.costPerPregnancy
-      });
-    });
-
-    // Debug logging for bull performance
-    console.log('🐂 Bull Performance Analysis:', {
-      totalBreedings: breedingRecords.length,
-      bullPerformance: Object.entries(bullPerformance).map(([id, data]) => ({
-        id,
-        name: data.displayName,
-        total: data.total,
-        successful: data.successful,
-        successRate: data.successRate,
-        cost: data.cost,
-        costPerPregnancy: data.costPerPregnancy
-      }))
-    });
+    console.log('🐂 Bull Usage Summary:', Object.entries(bullPerformance).map(([id, data]) => ({
+      id,
+      name: data.displayName,
+      breedings: data.total,
+      totalCost: data.cost
+    })));
 
     // Seasonal Analysis
     const seasonalData = {
@@ -272,13 +128,7 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
 
       seasonalData[season].breedings++;
       
-      // Check if successful - use same logic as bull performance
-      const hasCalf = calvingRecords.some(calving => 
-        calving.motherId === record.cowId && 
-        new Date(calving.date) > new Date(record.date)
-      );
-      
-      // Check if this breeding resulted in a positive pregnancy check
+      // Check if this breeding resulted in a positive pregnancy check (same logic as bull performance)
       const hasPositivePregnancyCheck = (cows.find(cow => cow.id === record.cowId)?.healthRecords || []).some(healthRecord => {
         if (healthRecord.type !== 'Pregnancy Check') return false;
         
@@ -286,14 +136,17 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
         const breedingDate = new Date(record.date);
         const description = (healthRecord.description || '').toLowerCase();
         
-        // Must be after this breeding date and contain positive indicators
-        return checkDate > breedingDate && 
-               (description.includes('positive') || 
-                description.includes('confirmed positive') ||
-                description.includes('pregnant'));
+        // Must be after this breeding AND contain positive confirmation
+        const isAfterBreeding = checkDate > breedingDate;
+        const isPositive = description.includes('positive') || 
+                          description.includes('confirmed positive') ||
+                          description.includes('pregnant') ||
+                          description.includes('pregnancy confirmed');
+        
+        return isAfterBreeding && isPositive;
       });
       
-      if (hasCalf || hasPositivePregnancyCheck) {
+      if (hasPositivePregnancyCheck) {
         seasonalData[season].success++;
       }
     });
@@ -306,6 +159,7 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       'Senior Cows (7+ years)': { count: 0, successRate: 0, breedings: 0, successful: 0 }
     };
 
+    // Age Group Performance - Use confirmed pregnancies instead of calving records
     relevantCows.forEach(cow => {
       if (cow.dateOfBirth) {
         const age = calculateAge(cow.dateOfBirth);
@@ -320,10 +174,31 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
         ageGroupPerformance[ageGroup].count++;
         
         const cowBreedings = (cow.breedingRecords || []).filter(record => new Date(record.date) >= startDate);
-        const cowCalvings = (cow.calvingRecords || []).filter(record => new Date(record.date) >= startDate);
-        
         ageGroupPerformance[ageGroup].breedings += cowBreedings.length;
-        ageGroupPerformance[ageGroup].successful += cowCalvings.length;
+        
+        // Count confirmed pregnancies instead of calving records
+        const confirmedPregnancies = cowBreedings.filter(breedingRecord => {
+          return (cow.healthRecords || []).some(healthRecord => {
+            if (healthRecord.type !== 'Pregnancy Check') return false;
+            
+            const checkDate = new Date(healthRecord.date);
+            const breedingDate = new Date(breedingRecord.date);
+            const description = (healthRecord.description || '').toLowerCase();
+            
+            // Must be after this breeding AND contain positive confirmation
+            const isAfterBreeding = checkDate > breedingDate;
+            const isPositive = description.includes('positive') || 
+                              description.includes('confirmed positive') ||
+                              description.includes('pregnant') ||
+                              description.includes('pregnancy confirmed');
+            
+            return isAfterBreeding && isPositive;
+          });
+        });
+        
+        ageGroupPerformance[ageGroup].successful += confirmedPregnancies.length;
+        
+        console.log(`🔍 AGE GROUP: ${cow.name} (${ageGroup}): ${cowBreedings.length} breedings, ${confirmedPregnancies.length} confirmed pregnancies`);
       }
     });
 
@@ -352,8 +227,9 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       return total + (bull?.cost || 0);
     }, 0);
 
-    const costPerPregnancy = calvingRecords.length > 0 
-      ? Math.round(totalBreedingCost / calvingRecords.length) 
+    // Use the global confirmedPregnancies for cost calculation
+    const costPerPregnancy = confirmedPregnancies.length > 0 
+      ? Math.round(totalBreedingCost / confirmedPregnancies.length) 
       : 0;
 
     // Trend Analysis (compare with previous period)
@@ -365,15 +241,26 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       })
     );
 
-    const previousCalvingRecords = relevantCows.flatMap(cow => 
-      (cow.calvingRecords || []).filter(record => {
-        const recordDate = new Date(record.date);
-        return recordDate >= previousStartDate && recordDate < startDate;
+    // Count previous confirmed pregnancies instead of calvings
+    const previousConfirmedPregnancies = relevantCows.flatMap(cow => 
+      (cow.healthRecords || []).filter(healthRecord => {
+        if (healthRecord.type !== 'Pregnancy Check') return false;
+        
+        const checkDate = new Date(healthRecord.date);
+        const description = (healthRecord.description || '').toLowerCase();
+        
+        const isInPreviousPeriod = checkDate >= previousStartDate && checkDate < startDate;
+        const isPositive = description.includes('positive') || 
+                          description.includes('confirmed positive') ||
+                          description.includes('pregnant') ||
+                          description.includes('pregnancy confirmed');
+        
+        return isInPreviousPeriod && isPositive;
       })
     );
 
     const previousSuccessRate = previousBreedingRecords.length > 0 
-      ? Math.round((previousCalvingRecords.length / previousBreedingRecords.length) * 100) 
+      ? Math.round((previousConfirmedPregnancies.length / previousBreedingRecords.length) * 100) 
       : 0;
 
     const successRateChange = previousSuccessRate > 0 
@@ -390,7 +277,7 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       },
       breeding: {
         totalBreedings: breedingRecords.length,
-        totalCalvings: calvingRecords.length,
+        totalConfirmedPregnancies: confirmedPregnancies.length,
         bullPerformance,
         seasonalData
       },
@@ -455,21 +342,19 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       }
     }
 
-    // Bull Performance Insights
-    const bullInsights = Object.entries(analytics.breeding.bullPerformance)
-      .filter(([, data]) => data.total >= 3) // Only bulls with 3+ breedings
-      .sort(([,a], [,b]) => b.successRate - a.successRate);
+    // Bull Usage Insights
+    const bullUsageInsights = Object.entries(analytics.breeding.bullPerformance)
+      .sort(([,a], [,b]) => b.total - a.total);
 
-    if (bullInsights.length > 0) {
-      const bestBull = bullInsights[0];
-      const worstBull = bullInsights[bullInsights.length - 1];
+    if (bullUsageInsights.length > 0) {
+      const mostUsedBull = bullUsageInsights[0];
       
-      if (bestBull[1].successRate - worstBull[1].successRate > 20) {
+      if (mostUsedBull[1].total >= 5) {
         insights.push({
-          id: 'bull-performance',
-          type: 'positive',
-          title: 'Bull Performance Variation',
-          message: `${bestBull[0]} has ${bestBull[1].successRate}% success rate vs ${worstBull[0]} at ${worstBull[1].successRate}%`,
+          id: 'bull-usage',
+          type: 'info',
+          title: 'Bull Usage Pattern',
+          message: `${mostUsedBull[0]} is your most used bull with ${mostUsedBull[1].total} breedings`,
           icon: Award,
           priority: 'medium',
           category: 'breeding'
@@ -527,16 +412,16 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
 
     // Cost Optimization Insights
     if (analytics.overview.costPerPregnancy > 0) {
-      const expensiveBulls = Object.entries(analytics.breeding.bullPerformance)
-        .filter(([, data]) => data.costPerPregnancy > analytics.overview.costPerPregnancy * 1.5)
-        .sort(([,a], [,b]) => b.costPerPregnancy - a.costPerPregnancy);
+      const highCostBulls = Object.entries(analytics.breeding.bullPerformance)
+        .filter(([, data]) => data.cost > analytics.overview.costPerPregnancy * 3)
+        .sort(([,a], [,b]) => b.cost - a.cost);
 
-      if (expensiveBulls.length > 0) {
+      if (highCostBulls.length > 0) {
         insights.push({
           id: 'cost-optimization',
           type: 'warning',
-          title: 'Cost Optimization Opportunity',
-          message: `${expensiveBulls[0][0]} costs $${expensiveBulls[0][1].costPerPregnancy} per pregnancy vs herd average of $${analytics.overview.costPerPregnancy}`,
+          title: 'High Breeding Costs',
+          message: `${highCostBulls[0][0]} has cost $${highCostBulls[0][1].cost} in breeding expenses`,
           icon: DollarSign,
           priority: 'medium',
           category: 'financial'
@@ -602,13 +487,8 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
                   description.includes('pregnant'));
         });
 
-        // Check if there's a calving record after this breeding
-        const hasCalvingAfterBreeding = (cow.calvingRecords || []).some(calving => {
-          const calvingDate = new Date(calving.date);
-          return calvingDate > breedingDate;
-        });
-
-        if (hasPositivePregnancyCheck || hasCalvingAfterBreeding) {
+        // Only use pregnancy confirmations, not calving records
+        if (hasPositivePregnancyCheck) {
           // Pregnancy confirmed, reset failure count
           consecutiveFailures = 0;
           lastBreedingDate = null;
@@ -665,20 +545,32 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
       });
     }
 
-    // Bull Selection
-    const bestBulls = Object.entries(analytics.breeding.bullPerformance)
-      .filter(([, data]) => data.total >= 3)
-      .sort(([,a], [,b]) => b.successRate - a.successRate)
+    // Bull Usage Recommendations
+    const mostUsedBulls = Object.entries(analytics.breeding.bullPerformance)
+      .sort(([,a], [,b]) => b.total - a.total)
       .slice(0, 3);
 
-    if (bestBulls.length > 0) {
+    if (mostUsedBulls.length > 0) {
       recommendations.push({
-        id: 'bull-selection',
+        id: 'bull-usage',
         type: 'positive',
-        title: 'Top Performing Bulls',
-        message: `Focus on ${bestBulls.map(([name]) => name).join(', ')} for best success rates`,
-        action: 'Update breeding strategy',
+        title: 'Most Used Bulls',
+        message: `${mostUsedBulls.map(([name]) => name).join(', ')} are your most frequently used bulls`,
+        action: 'Review inventory levels',
         icon: Award
+      });
+    }
+
+    // Low Stock Alerts
+    const lowStockBulls = bullInventory.filter(bull => bull.straws <= 5 && bull.straws > 0);
+    if (lowStockBulls.length > 0) {
+      recommendations.push({
+        id: 'low-stock-bulls',
+        type: 'warning',
+        title: 'Low Stock Alerts',
+        message: `${lowStockBulls.length} bull(s) have 5 or fewer straws remaining`,
+        action: 'Replenish inventory',
+        icon: AlertTriangle
       });
     }
 
@@ -861,7 +753,7 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
             </div>
           </div>
           <div className="mt-4">
-            <p className="text-sm text-slate-500">{analytics.breeding.totalCalvings} successful pregnancies</p>
+            <p className="text-sm text-slate-500">{analytics.breeding.totalConfirmedPregnancies} confirmed pregnancies</p>
           </div>
         </div>
       </div>
@@ -976,11 +868,11 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
 
       {/* Performance Analysis Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Bull Performance Chart */}
+        {/* Bulls by Usage Chart - Simpler and More Actionable */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
           <div className="p-6 border-b border-slate-100">
-            <h3 className="text-lg font-semibold text-slate-900">Bull Performance Comparison</h3>
-            <p className="text-sm text-slate-600">Success rates and cost efficiency by bull</p>
+            <h3 className="text-lg font-semibold text-slate-900">Bulls by Usage</h3>
+            <p className="text-sm text-slate-600">Most used bulls and breeding costs</p>
           </div>
           <div className="p-6">
             {Object.keys(analytics.breeding.bullPerformance).length === 0 ? (
@@ -991,20 +883,40 @@ const AnalyticsView = ({ cows, bullInventory = [] }) => {
             ) : (
               <div className="space-y-3">
                 {Object.entries(analytics.breeding.bullPerformance)
-                  .filter(([, data]) => data.total >= 2)
-                  .sort(([,a], [,b]) => b.successRate - a.successRate)
-                  .map(([bullName, data]) => (
-                    <div key={bullName} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-slate-900">{data.displayName}</p>
-                        <p className="text-sm text-slate-600">{data.total} breedings</p>
+                  .sort(([,a], [,b]) => b.total - a.total) // Sort by most used
+                  .map(([bullId, data]) => {
+                    // Find bull in inventory for straws remaining
+                    const inventoryBull = bullInventory.find(b => b.naabCode === bullId);
+                    const strawsRemaining = inventoryBull?.straws || 0;
+                    
+                    return (
+                      <div key={bullId} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                        <div className="flex-1">
+                          <p className="font-medium text-slate-900">{data.displayName}</p>
+                          <p className="text-sm text-slate-600">{bullId}</p>
+                          <div className="flex items-center space-x-4 mt-1">
+                            <span className="text-sm text-slate-500">{data.total} breedings</span>
+                            <span className="text-sm text-slate-500">•</span>
+                            <span className="text-sm text-slate-500">${data.cost} spent</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-slate-900">{strawsRemaining} straws</p>
+                          <p className="text-sm text-slate-600">remaining</p>
+                          {strawsRemaining <= 5 && strawsRemaining > 0 && (
+                            <span className="inline-block px-2 py-1 text-xs bg-orange-100 text-orange-700 rounded-full mt-1">
+                              Low Stock
+                            </span>
+                          )}
+                          {strawsRemaining === 0 && (
+                            <span className="inline-block px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full mt-1">
+                              Out of Stock
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-slate-900">{data.successRate}%</p>
-                        <p className="text-sm text-slate-600">${data.costPerPregnancy}</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             )}
           </div>
