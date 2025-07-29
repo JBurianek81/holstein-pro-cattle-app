@@ -501,7 +501,55 @@ export const utils = {
   dateToTimestamp: (date) => {
     if (!date) return null;
     return serverTimestamp();
-  }
+  },
+
+           // Store FCM token for user
+         storeFCMToken: async (userId, token) => {
+           try {
+             console.log('🔔 Storing FCM token for user:', userId);
+             console.log('🔔 Token type:', token === 'ios-browser-notifications' ? 'iOS Browser' : 'FCM');
+             
+             const userRef = doc(db, COLLECTIONS.USERS, userId);
+             const userDoc = await getDoc(userRef);
+             
+             if (userDoc.exists()) {
+               // Update existing user document
+               const userData = userDoc.data();
+               const existingTokens = userData.fcmTokens || [];
+               
+               // Add token if not already present
+               if (!existingTokens.includes(token)) {
+                 const updatedTokens = [...existingTokens, token];
+                 
+                 await updateDoc(userRef, {
+                   fcmTokens: updatedTokens,
+                   deviceType: token === 'ios-browser-notifications' ? 'ios' : 'android/desktop',
+                   notificationPreferences: {
+                     pushNotifications: true,
+                     emailNotifications: true,
+                     alertFrequency: 'immediate',
+                     breedingAlerts: true,
+                     healthAlerts: true,
+                     calvingAlerts: true
+                   },
+                   updatedAt: serverTimestamp()
+                 });
+                 
+                 console.log('✅ FCM token stored successfully');
+                 return { success: true };
+               } else {
+                 console.log('ℹ️ FCM token already exists for user');
+                 return { success: true };
+               }
+             } else {
+               console.log('❌ User document not found for FCM token storage');
+               return { success: false, error: 'User not found' };
+             }
+           } catch (error) {
+             console.error('❌ Error storing FCM token:', error);
+             return { success: false, error: error.message };
+           }
+         }
 };
 
 // Batch operations for better performance

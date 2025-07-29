@@ -7,7 +7,8 @@ import {
   COW_GENDERS, 
   COW_CATEGORIES, 
   PRODUCTION_STATUSES,
-  getCategoryByAge
+  getCategoryByAge,
+  determineCategoryByGenderAndAge
 } from '../utils/cowDataModel';
 
 const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
@@ -68,7 +69,7 @@ const AddCowModal = ({ isOpen, onClose, onSave, editingCow = null }) => {
   // Auto-suggest category based on age and gender
   useEffect(() => {
     if (formData.dateOfBirth && formData.gender && !editingCow) {
-      const suggestedCategory = getCategoryByAge(formData.dateOfBirth, formData.gender);
+      const suggestedCategory = determineCategoryByGenderAndAge(formData.gender, formData.dateOfBirth);
       setFormData(prev => ({ ...prev, category: suggestedCategory }));
     }
   }, [formData.dateOfBirth, formData.gender, editingCow]);

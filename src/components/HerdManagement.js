@@ -2,7 +2,7 @@ import React from 'react';
 import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive, Activity, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc } from 'lucide-react';
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge, calculateHealthScore, getHealthScoreBadge } from '../utils/cowDataModel';
 
-const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile, onArchiveCow }) => {
+const HerdManagement = ({ cows, sortBy = 'name', onAddCow, onEditCow, onDeleteCow, onViewProfile, onArchiveCow }) => {
   const [searchTerm, setSearchTerm] = React.useState('');
   const [activeFilter, setActiveFilter] = React.useState('all');
   const [selectedCows, setSelectedCows] = React.useState(new Set());
@@ -12,7 +12,6 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
   
   // Advanced filter states
   const [showFilterPanel, setShowFilterPanel] = React.useState(false);
-  const [sortBy, setSortBy] = React.useState('name');
   const [sortDirection, setSortDirection] = React.useState('asc');
   const [selectedBreeds, setSelectedBreeds] = React.useState([]);
   const [selectedStatuses, setSelectedStatuses] = React.useState([]);
@@ -119,16 +118,38 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
       
       switch (sortBy) {
         case 'name':
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
+          aValue = (a.name || '').toLowerCase();
+          bValue = (b.name || '').toLowerCase();
           break;
         case 'tagNumber':
-          aValue = a.tagNumber.toLowerCase();
-          bValue = b.tagNumber.toLowerCase();
+          // Try numerical sorting first, fallback to alphabetical
+          const aNum = parseInt(a.tagNumber);
+          const bNum = parseInt(b.tagNumber);
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            aValue = aNum;
+            bValue = bNum;
+          } else {
+            aValue = (a.tagNumber || '').toLowerCase();
+            bValue = (b.tagNumber || '').toLowerCase();
+          }
+          break;
+        case 'breed':
+          aValue = (a.breed || '').toLowerCase();
+          bValue = (b.breed || '').toLowerCase();
           break;
         case 'age':
-          aValue = new Date(a.dateOfBirth || 0);
-          bValue = new Date(b.dateOfBirth || 0);
+          // Calculate age from dateOfBirth
+          const aAge = a.dateOfBirth ? new Date(a.dateOfBirth) : new Date(0);
+          const bAge = b.dateOfBirth ? new Date(b.dateOfBirth) : new Date(0);
+          aValue = aAge;
+          bValue = bAge;
+          break;
+        case 'status':
+          // Sort by reproductive status
+          const aStatus = calculateReproductiveStatus(a) || '';
+          const bStatus = calculateReproductiveStatus(b) || '';
+          aValue = aStatus.toLowerCase();
+          bValue = bStatus.toLowerCase();
           break;
         case 'healthScore':
           aValue = calculateHealthScore(a);
@@ -141,8 +162,8 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
           bValue = bRecords.length > 0 ? Math.max(...bRecords.map(r => new Date(r.date))) : new Date(0);
           break;
         default:
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
+          aValue = (a.name || '').toLowerCase();
+          bValue = (b.name || '').toLowerCase();
       }
       
       if (sortDirection === 'asc') {
@@ -404,20 +425,7 @@ const HerdManagement = ({ cows, onAddCow, onEditCow, onDeleteCow, onViewProfile,
               <div className="space-y-4">
                 <h4 className="font-medium text-slate-900">Search & Sort</h4>
                 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Sort by</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="name">Name</option>
-                    <option value="tagNumber">Tag #</option>
-                    <option value="age">Age</option>
-                    <option value="healthScore">Health Score</option>
-                    <option value="lastUpdated">Last Updated</option>
-                  </select>
-                </div>
+
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Sort Direction</label>

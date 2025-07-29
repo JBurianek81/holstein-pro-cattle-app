@@ -19,6 +19,12 @@ import {
   LogOut
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { requestNotificationPermission, onMessageListener } from './firebase/messaging';
+import { utils } from './utils/firestoreService';
+import { checkTaskNotifications, initializeNotifications, createTestTask, createTimezoneTestTasks } from './utils/taskNotifications';
+import taskService from './utils/taskService';
+import { determineCategoryByGenderAndAge, updateCategoryByAge } from './utils/cowDataModel';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -35,11 +41,42 @@ import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBa
 
 function AppContent() {
   const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData, testFirebaseConnection } = useAuth();
+  const { updateTheme } = useTheme();
   
   // ALL HOOKS FIRST - at the very top
   const [currentView, setCurrentView] = useState('dashboard');
   const [authView, setAuthView] = useState('landing'); // 'landing', 'login', 'register'
   const [dashboardFilter, setDashboardFilter] = useState(null);
+  const [hasInitializedDashboard, setHasInitializedDashboard] = useState(false);
+
+  // Environment detection
+  useEffect(() => {
+    console.log('🌍 ENVIRONMENT CHECK:');
+    console.log('🌍 Current URL:', window.location.href);
+    console.log('🌍 Hostname:', window.location.hostname);
+    console.log('🌍 Is localhost:', window.location.hostname === 'localhost');
+    console.log('🌍 Is live site:', window.location.hostname.includes('firebaseapp.com') || window.location.hostname.includes('web.app'));
+    console.log('🌍 User:', user?.email);
+    console.log('🌍 User farm code:', user?.farmCode);
+    
+    // Show environment indicator in console
+    const isLive = window.location.hostname.includes('firebaseapp.com') || window.location.hostname.includes('web.app');
+    const envLabel = isLive ? '🌐 LIVE SITE' : '🏠 LOCAL DEV';
+    console.log(`${envLabel} - Connected to Firebase project: cattle-management-app-ae01b`);
+    
+    // Clear local storage if switching to live site
+    if (isLive) {
+      const lastEnv = localStorage.getItem('lastEnvironment');
+      if (lastEnv === 'local') {
+        console.log('🔄 Switching from local to live - clearing local task cache');
+        localStorage.removeItem('tasks');
+        localStorage.removeItem('lastTaskSync');
+      }
+      localStorage.setItem('lastEnvironment', 'live');
+    } else {
+      localStorage.setItem('lastEnvironment', 'local');
+    }
+  }, [user]);
 
   // Cow management state
   const [cows, setCows] = useState(farmData?.cows || []);
@@ -49,6 +86,9 @@ function AppContent() {
   const [editingCow, setEditingCow] = useState(null);
   const [profileCow, setProfileCow] = useState(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  
+  // Task management state
+  const [userTasks, setUserTasks] = useState([]);
 
   // Bull inventory state
   const [bullInventory, setBullInventory] = useState(farmData?.bullInventory || [
@@ -78,16 +118,345 @@ function AppContent() {
     ownerName: farm?.ownerName || 'Jason Burianek',
     farmAddress: '123 Dairy Lane, Farmville, CA 90210',
     phone: '+1 (555) 123-4567',
-    email: farm?.ownerEmail || 'jason@holsteinpro.com',
+    email: user?.email || farm?.ownerEmail || 'jason@holsteinpro.com',
     operationType: farm?.settings?.operationType || 'Dairy',
     herdSize: farm?.settings?.herdSize || '100-500',
     yearsInOperation: farm?.settings?.yearsInOperation || '15',
     farmLogo: null
   });
 
+  // App preferences state
+  const [appPreferences, setAppPreferences] = useState({
+    defaultDashboard: 'overview',
+    cowListSorting: 'name',
+    dateFormat: 'MM/DD/YYYY',
+    theme: 'light',
+    language: 'en'
+  });
+
   // ALL useEffect hooks at the top level
-      // Sync local state with auth context
-    useEffect(() => {
+  
+  // Track Dashboard component lifecycle
+  useEffect(() => {
+    if (currentView === 'dashboard') {
+      console.log('🏠 Dashboard component mounted');
+      console.log('🏠 Dashboard component - hasInitializedDashboard:', hasInitializedDashboard);
+      console.log('🏠 Dashboard component - appPreferences.defaultDashboard:', appPreferences.defaultDashboard);
+    } else {
+      console.log('🏠 Dashboard component unmounted - currentView changed to:', currentView);
+      console.log('🏠 Dashboard component unmounted - hasInitializedDashboard:', hasInitializedDashboard);
+    }
+  }, [currentView, hasInitializedDashboard, appPreferences.defaultDashboard]);
+  
+  // Load saved preferences from localStorage
+  useEffect(() => {
+    const savedSettings = localStorage.getItem('holsteinProSettings');
+    if (savedSettings) {
+      try {
+        const settings = JSON.parse(savedSettings);
+        if (settings.app) {
+          console.log('⚙️ Loading saved app preferences:', settings.app);
+          console.log('⚙️ Current view before loading preferences:', currentView);
+          
+          setAppPreferences(settings.app);
+          
+          // Apply theme immediately
+          if (settings.app.theme) {
+            updateTheme(settings.app.theme);
+          }
+          
+          console.log('⚙️ Current view after loading preferences:', currentView);
+        }
+      } catch (error) {
+        console.error('❌ Error loading saved preferences:', error);
+      }
+    }
+  }, [updateTheme]);
+
+  // Handle default dashboard routing - only redirect on initial load
+  
+  useEffect(() => {
+    // Only run this effect once when user and farm are loaded
+    if (user && farm && !hasInitializedDashboard) {
+      console.log('🏠 Dashboard initialization check - currentView:', currentView);
+      console.log('🏠 Dashboard initialization check - defaultDashboard:', appPreferences.defaultDashboard);
+      
+      const validDashboards = ['overview', 'herd', 'breeding', 'calendar', 'analytics'];
+      const defaultDashboard = validDashboards.includes(appPreferences.defaultDashboard) 
+        ? appPreferences.defaultDashboard 
+        : 'overview';
+      
+      // Only redirect if the default is not 'overview' (which should show the Dashboard)
+      if (defaultDashboard !== 'overview') {
+        console.log('🏠 Initial redirect to default dashboard:', defaultDashboard);
+        setCurrentView(defaultDashboard);
+      } else {
+        console.log('🏠 Staying on Dashboard (overview) - no redirect needed');
+      }
+      
+      // Mark as initialized to prevent future redirects
+      setHasInitializedDashboard(true);
+    }
+  }, [user, farm, hasInitializedDashboard]); // Removed appPreferences.defaultDashboard from dependencies to prevent re-triggering
+
+  // Additional safeguard: Prevent dashboard redirects after initial load
+  useEffect(() => {
+    if (hasInitializedDashboard && currentView === 'dashboard') {
+      console.log('🏠 Dashboard safeguard: User is on dashboard, preventing any redirects');
+      console.log('🏠 Dashboard safeguard: Current state is stable');
+    }
+  }, [hasInitializedDashboard, currentView]);
+
+  // Emergency stop: Prevent any navigation changes if user is on dashboard
+  useEffect(() => {
+    if (currentView === 'dashboard' && hasInitializedDashboard) {
+      console.log('🏠 EMERGENCY STOP: User is on dashboard and app is initialized - blocking any navigation changes');
+    }
+  }, [currentView, hasInitializedDashboard]);
+
+  // Data migration: Fix male animal categorization
+  useEffect(() => {
+    if (cows.length > 0 && hasLoadedInitialData) {
+      const needsMigration = cows.some(cow => 
+        cow.gender === 'Male' && cow.category !== 'Bull'
+      );
+      
+      if (needsMigration) {
+        console.log('🔧 Running data migration: Fixing male animal categorization...');
+        
+        const updatedCows = cows.map(cow => {
+          // Fix male animals that aren't categorized as "Bull"
+          if (cow.gender === 'Male' && cow.category !== 'Bull') {
+            console.log(`🔧 Migrating male animal ${cow.name || cow.tagNumber} from ${cow.category} to Bull`);
+            return { ...cow, category: 'Bull' };
+          }
+          
+          // Also run the general category update function for all animals
+          return updateCategoryByAge(cow);
+        });
+        
+        // Check if any changes were made
+        const hasChanges = updatedCows.some((updatedCow, index) => 
+          JSON.stringify(updatedCow) !== JSON.stringify(cows[index])
+        );
+        
+        if (hasChanges) {
+          console.log('🔧 Data migration completed: Updated animal categories');
+          setCows(updatedCows);
+        }
+      }
+    }
+  }, [cows.length, hasLoadedInitialData]);
+
+  // Initialize Firebase Cloud Messaging and Task Notifications
+  useEffect(() => {
+    const initializeFCM = async () => {
+      try {
+        console.log('🔔 Initializing Firebase Cloud Messaging...');
+        
+        // Request notification permission and get FCM token
+        const token = await requestNotificationPermission();
+        
+        if (token) {
+          console.log('✅ FCM token obtained:', token);
+          // Store token in user's profile
+          if (user?.uid) {
+            const result = await utils.storeFCMToken(user.uid, token);
+            if (result.success) {
+              console.log('✅ FCM token stored in Firestore');
+            } else {
+              console.error('❌ Failed to store FCM token:', result.error);
+            }
+          }
+        } else {
+          console.log('❌ Failed to get FCM token');
+        }
+        
+        // Set up foreground message listener
+        onMessageListener()
+          .then((payload) => {
+            console.log('📨 Foreground message received:', payload);
+            // Handle foreground messages here
+            // You can show a custom notification or update UI
+          })
+          .catch((err) => {
+            console.error('❌ Error in foreground message listener:', err);
+          });
+          
+      } catch (error) {
+        console.error('❌ Error initializing FCM:', error);
+      }
+    };
+
+    // Only initialize FCM when user is authenticated
+    if (user && !loading) {
+      initializeFCM();
+    }
+  }, [user, loading]);
+
+  // Load user tasks for notification bell
+  useEffect(() => {
+    const loadUserTasks = async () => {
+      if (user?.email && user?.farmCode) {
+        try {
+          const result = await taskService.getUserTasks(user.email, user.farmCode);
+          if (result.success) {
+            setUserTasks(result.tasks);
+          }
+        } catch (error) {
+          console.error('Error loading user tasks:', error);
+        }
+      }
+    };
+
+    loadUserTasks();
+  }, [user?.email, user?.farmCode]);
+
+  // Task notification checking system - DISABLED for now while we debug
+  // useEffect(() => {
+  //   let notificationInterval;
+    
+  //   const checkNotifications = async () => {
+  //     try {
+  //       // Only check if user is authenticated and notifications are enabled
+  //       if (!user?.email || !farmData?.profileData?.notifications?.enabled) {
+  //         console.log('🔔 Skipping notification check - user not authenticated or notifications disabled');
+  //         return;
+  //       }
+
+  //       console.log('🔔 Running scheduled notification check...');
+        
+  //       // Get tasks from Firestore (new task service)
+  //       const taskResult = await taskService.getUserTasks(user.email, user.farmCode);
+  //       const tasks = taskResult.success ? taskResult.tasks : [];
+        
+  //       if (tasks.length === 0) {
+  //         console.log('🔔 No tasks found for notification check');
+  //         return;
+  //       }
+        
+  //       // Get notification preferences
+  //       const notificationPreferences = farmData.profileData.notifications;
+        
+  //       // Get FCM token for user
+  //       const userDoc = await utils.getUserById(user.uid);
+  //       const userToken = userDoc.success ? userDoc.user.fcmToken : null;
+        
+  //       // Check for notifications
+  //       const result = await checkTaskNotifications(
+  //         tasks, 
+  //         user.email, 
+  //         notificationPreferences, 
+  //         userToken
+  //       );
+        
+  //       console.log('🔔 Notification check result:', result);
+        
+  //     } catch (error) {
+  //       console.error('❌ Error in notification check:', error);
+  //     }
+  //   };
+
+  //   // Run initial check
+  //   if (user && farmData && !loading) {
+  //     checkNotifications();
+  //   }
+
+  //   // Set up interval for periodic checks (every 30 minutes)
+  //   if (user && farmData?.profileData?.notifications?.enabled) {
+  //     notificationInterval = setInterval(checkNotifications, 30 * 60 * 1000); // 30 minutes
+  //     console.log('🔔 Set up notification check interval (30 minutes)');
+  //   }
+
+  //   // Cleanup interval on unmount or when dependencies change
+  //   return () => {
+  //     if (notificationInterval) {
+  //       clearInterval(notificationInterval);
+  //       console.log('🔔 Cleared notification check interval');
+  //       }
+  //     };
+  // }, [user, farmData, loading]);
+
+  // Manual notification check function (for testing)
+  const handleManualNotificationCheck = async () => {
+    try {
+      console.log('🔔 Manual notification check triggered');
+      
+      const savedTasks = localStorage.getItem('todaysTasks');
+      const tasks = savedTasks ? JSON.parse(savedTasks) : [];
+      
+      if (tasks.length === 0) {
+        console.log('🔔 No tasks found for manual check');
+        return;
+      }
+      
+      const notificationPreferences = farmData?.profileData?.notifications;
+      const userDoc = await utils.getUserById(user.uid);
+      const userToken = userDoc.success ? userDoc.user.fcmToken : null;
+      
+      const result = await checkTaskNotifications(
+        tasks, 
+        user.email, 
+        notificationPreferences, 
+        userToken
+      );
+      
+      console.log('🔔 Manual notification check result:', result);
+      
+    } catch (error) {
+      console.error('❌ Error in manual notification check:', error);
+    }
+  };
+
+  // Create test task function
+  const handleCreateTestTask = () => {
+    try {
+      if (!user?.email) {
+        console.log('❌ No user email for test task creation');
+        return;
+      }
+      
+      const testTask = createTestTask(user.email);
+      console.log('🔔 Created test task:', testTask);
+      
+      // Add to localStorage tasks
+      const savedTasks = localStorage.getItem('todaysTasks');
+      const tasks = savedTasks ? JSON.parse(savedTasks) : [];
+      tasks.push(testTask);
+      localStorage.setItem('todaysTasks', JSON.stringify(tasks));
+      
+      console.log('✅ Test task added to localStorage');
+      
+    } catch (error) {
+      console.error('❌ Error creating test task:', error);
+    }
+  };
+
+  const handleCreateTimezoneTestTasks = () => {
+    try {
+      if (!user?.email) {
+        console.log('❌ No user email for timezone test task creation');
+        return;
+      }
+      
+      const timezoneTestTasks = createTimezoneTestTasks(user.email);
+      console.log('🔔 Created timezone test tasks:', timezoneTestTasks);
+      
+      // Add to localStorage tasks
+      const savedTasks = localStorage.getItem('todaysTasks');
+      const tasks = savedTasks ? JSON.parse(savedTasks) : [];
+      tasks.push(...timezoneTestTasks);
+      localStorage.setItem('todaysTasks', JSON.stringify(tasks));
+      
+      console.log('✅ Timezone test tasks added to localStorage');
+      
+    } catch (error) {
+      console.error('❌ Error creating timezone test tasks:', error);
+    }
+  };
+
+  // Sync local state with auth context
+  useEffect(() => {
       console.log('🚨 EMERGENCY DEBUG: Main useEffect triggered');
       console.log('🚨 EMERGENCY DEBUG: farmData received:', farmData);
       console.log('🚨 EMERGENCY DEBUG: farm received:', farm);
@@ -187,7 +556,7 @@ function AppContent() {
         ownerName: farm?.ownerName || farmData.profileData?.ownerName || '',
         farmAddress: farmData.profileData?.farmAddress || '',
         phone: farmData.profileData?.phone || '',
-        email: farm?.ownerEmail || user?.email || farmData.profileData?.email || '',
+        email: user?.email || farmData.profileData?.email || farm?.ownerEmail || '',
         operationType: farm?.settings?.operationType || farmData.profileData?.operationType || 'Dairy',
         herdSize: farm?.settings?.herdSize || farmData.profileData?.herdSize || '100-500',
         yearsInOperation: farm?.settings?.yearsInOperation || farmData.profileData?.yearsInOperation || '1',
@@ -1060,6 +1429,47 @@ function AppContent() {
     console.log('✅ Profile data updated:', updatedProfileData.farmName);
   };
 
+
+
+  // Update app preferences when settings are saved
+  const handlePreferencesUpdate = (updatedPreferences) => {
+    console.log('⚙️ App preferences updated:', updatedPreferences);
+    setAppPreferences(updatedPreferences);
+    
+    // Apply theme changes immediately
+    if (updatedPreferences.theme) {
+      updateTheme(updatedPreferences.theme);
+    }
+  };
+
+  // Sort cows based on app preferences
+  const getSortedCows = (cowsToSort = cows) => {
+    const sortedCows = [...cowsToSort];
+    
+    switch (appPreferences.cowListSorting) {
+      case 'name':
+        return sortedCows.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      case 'tagNumber':
+        return sortedCows.sort((a, b) => (a.tagNumber || '').localeCompare(b.tagNumber || ''));
+      case 'breed':
+        return sortedCows.sort((a, b) => (a.breed || '').localeCompare(b.breed || ''));
+      case 'age':
+        return sortedCows.sort((a, b) => {
+          const ageA = a.dateOfBirth ? new Date(a.dateOfBirth) : new Date(0);
+          const ageB = b.dateOfBirth ? new Date(b.dateOfBirth) : new Date(0);
+          return ageA - ageB;
+        });
+      case 'status':
+        return sortedCows.sort((a, b) => {
+          const statusA = calculateReproductiveStatus(a) || '';
+          const statusB = calculateReproductiveStatus(b) || '';
+          return statusA.localeCompare(statusB);
+        });
+      default:
+        return sortedCows;
+    }
+  };
+
   const handleBreedingRecordSaved = async (cow, breedingRecord, selectedBullId, isEditing = false, oldBreedingRecord = null) => {
     console.log('🔴 SAVING RECORD: About to save animal data');
     console.log('🔴 SAVING RECORD: Animal ID:', cow.id);
@@ -1198,19 +1608,27 @@ function AppContent() {
 
   // Get filtered animals for dashboard
   const getFilteredDashboardAnimals = () => {
+    let filteredCows = [];
+    
     switch (dashboardFilter) {
       case 'total':
-        return cows.filter(cow => !cow.archived);
+        filteredCows = cows.filter(cow => !cow.archived);
+        break;
       case 'pregnant':
-        return cows.filter(cow => {
+        filteredCows = cows.filter(cow => {
           const reproductiveStatus = calculateReproductiveStatus(cow);
           return reproductiveStatus === 'PREGNANT' && !cow.archived;
         });
+        break;
       case 'inHeat':
-        return getCowsInHeatToday().filter(cow => !cow.archived);
+        filteredCows = getCowsInHeatToday().filter(cow => !cow.archived);
+        break;
       default:
         return [];
     }
+    
+    // Apply sorting to filtered results
+    return getSortedCows(filteredCows);
   };
 
   // Update metrics based on current cows data
@@ -1226,7 +1644,7 @@ function AppContent() {
 
   // Navigation items with better organization
   const navigationItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home, active: true },
+    { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'herd', label: 'Herd Management', icon: Users, badge: updatedMetrics.total.value.toString() },
     { id: 'breeding', label: 'Breeding Center', icon: Heart, badge: updatedMetrics.breeding.value.toString() },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -1235,11 +1653,11 @@ function AppContent() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
       {/* Premium Sidebar */}
-      <div className="w-72 bg-white shadow-xl border-r border-slate-200">
+      <div className="w-72 bg-white dark:bg-slate-800 shadow-xl border-r border-slate-200 dark:border-slate-700">
         {/* Brand Header */}
-        <div className="p-6 border-b border-slate-100">
+        <div className="p-6 border-b border-slate-100 dark:border-slate-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center">
               <Award className="w-6 h-6 text-white" />
@@ -1336,6 +1754,47 @@ function AppContent() {
               </div>
               
             <div className="flex items-center space-x-4">
+              {/* Environment Indicator */}
+              {(() => {
+                const isLive = window.location.hostname.includes('firebaseapp.com') || window.location.hostname.includes('web.app');
+                return (
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    isLive 
+                      ? 'bg-green-100 text-green-700 border border-green-200' 
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
+                  }`}>
+                    {isLive ? '🌐 LIVE' : '🏠 LOCAL'}
+                  </div>
+                );
+              })()}
+              
+              {/* Notifications - Only show if user has pending tasks */}
+              {(() => {
+                try {
+                  // Only show if we're on a supported device and have tasks
+                  const hasTasks = userTasks && userTasks.length > 0;
+                  const pendingTasks = userTasks ? userTasks.filter(task => !task.completed).length : 0;
+                  
+                  if (hasTasks && pendingTasks > 0) {
+                    return (
+                      <div
+                        className="relative p-2 text-slate-600"
+                        title={`${pendingTasks} pending task${pendingTasks !== 1 ? 's' : ''}`}
+                      >
+                        <Bell className="w-5 h-5" />
+                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                          {pendingTasks > 9 ? '9+' : pendingTasks}
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                } catch (error) {
+                  console.error('Error rendering notification bell:', error);
+                  return null;
+                }
+              })()}
+              
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1350,10 +1809,13 @@ function AppContent() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <main className="flex-1 p-6 overflow-auto bg-slate-50 dark:bg-slate-900">
           {/* Dashboard View */}
           {currentView === 'dashboard' && (
-            <div className="space-y-6">
+            <>
+              {console.log('🏠 Dashboard component rendering - currentView:', currentView)}
+              {console.log('🏠 Dashboard component - hasInitializedDashboard:', hasInitializedDashboard)}
+              <div className="space-y-6">
               {/* Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <button 
@@ -1524,7 +1986,7 @@ function AppContent() {
               )}
 
               {/* Today's Tasks */}
-              <TodaysTasks cows={cows} />
+                              <TodaysTasks cows={cows} farm={farm} user={user} />
 
               {/* Alerts Section */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
@@ -1588,12 +2050,14 @@ function AppContent() {
 
 
             </div>
+            </>
           )}
 
           {/* Herd Management View */}
           {currentView === 'herd' && (
             <HerdManagement
-              cows={cows}
+              cows={getSortedCows()}
+              sortBy={appPreferences.cowListSorting}
               onAddCow={handleAddCow}
               onEditCow={handleEditCow}
               onDeleteCow={handleDeleteCow}
@@ -1605,7 +2069,7 @@ function AppContent() {
           {/* Archived Animals View */}
           {currentView === 'archived' && (
             <ArchivedAnimals
-              cows={cows}
+              cows={getSortedCows(cows.filter(cow => cow.archived))}
               onRestoreCow={handleRestoreCow}
               onPermanentlyDeleteCow={handlePermanentlyDeleteCow}
               onViewProfile={handleViewProfile}
@@ -1615,7 +2079,7 @@ function AppContent() {
           {/* Breeding Center View */}
           {currentView === 'breeding' && (
             <BreedingCenter
-              cows={cows}
+              cows={getSortedCows()}
               onViewProfile={handleViewProfile}
               onUpdateCow={handleUpdateCowFromProfile}
               bullInventory={bullInventory}
@@ -1633,7 +2097,7 @@ function AppContent() {
           {/* Analytics View */}
           {currentView === 'analytics' && (
             <AnalyticsView
-              cows={cows}
+              cows={getSortedCows()}
               bullInventory={bullInventory}
             />
           )}
@@ -1645,8 +2109,12 @@ function AppContent() {
               <SettingsView 
                 profileData={profileData} 
                 onProfileUpdate={handleProfileUpdate}
+                onPreferencesUpdate={handlePreferencesUpdate}
                 cows={cows}
                 onUpdateCows={setCows}
+                            onManualNotificationCheck={handleManualNotificationCheck}
+            onCreateTestTask={handleCreateTestTask}
+            onCreateTimezoneTestTasks={handleCreateTimezoneTestTasks}
               />
             </>
           )}
@@ -1685,12 +2153,14 @@ function AppContent() {
   );
 }
 
-// Main App wrapper with AuthProvider
+// Main App wrapper with AuthProvider and ThemeProvider
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

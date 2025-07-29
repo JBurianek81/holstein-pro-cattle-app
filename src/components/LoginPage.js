@@ -16,7 +16,7 @@ import {
   authenticateUser, 
   createUser, 
   getFarmByCode, 
-  addMemberToFarm,
+  joinFarmByCode,
   validateEmail, 
   validatePassword,
   validateFarmCode
@@ -145,6 +145,9 @@ const LoginPage = ({ onNavigate, onLoginSuccess }) => {
   };
 
   const handleJoinStep2 = async () => {
+    console.log('🎯 FORM: handleJoinStep2 called with farm code:', formData.farmCode);
+    console.log('🎯 FORM: Current user data:', { email: formData.email, name: formData.name });
+    
     if (!validateJoinStep2()) {
       return;
     }
@@ -154,7 +157,8 @@ const LoginPage = ({ onNavigate, onLoginSuccess }) => {
 
     try {
       // Create user account
-      const userResult = createUser({
+      console.log('🎯 FORM: Creating user account...');
+      const userResult = await createUser({
         email: formData.email,
         password: formData.password,
         name: formData.name,
@@ -162,27 +166,33 @@ const LoginPage = ({ onNavigate, onLoginSuccess }) => {
         role: 'member'
       });
 
+      console.log('🎯 FORM: User creation result:', userResult);
+
       if (!userResult.success) {
         setErrors({ submit: userResult.error });
         return;
       }
 
-      // Add user to farm members
-      const addMemberResult = addMemberToFarm(formData.farmCode, formData.email);
+      // Join farm using joinFarmByCode
+      console.log('🎯 FORM: Joining farm with code:', formData.farmCode);
+      const joinResult = await joinFarmByCode(formData.farmCode, userResult.user);
       
-      if (!addMemberResult.success) {
-        setErrors({ submit: addMemberResult.error });
+      console.log('🎯 FORM: Join farm result:', joinResult);
+      
+      if (!joinResult.success) {
+        setErrors({ submit: joinResult.message || joinResult.error });
         return;
       }
 
       // Success - call login success callback
+      console.log('✅ FORM: Successfully joined, calling login success...');
       onLoginSuccess({
         user: userResult.user,
         farm: farmInfo
       });
 
     } catch (error) {
-      console.error('Join farm error:', error);
+      console.error('❌ FORM: Join farm error:', error);
       setErrors({ submit: 'Failed to join farm. Please try again.' });
     } finally {
       setIsSubmitting(false);

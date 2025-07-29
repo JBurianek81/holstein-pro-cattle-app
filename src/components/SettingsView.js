@@ -29,12 +29,12 @@ import {
   X
 } from 'lucide-react';
 
-import { createCowRecord, calculateReproductiveStatus } from '../utils/cowDataModel';
+import { createCowRecord, calculateReproductiveStatus, determineCategoryByGenderAndAge } from '../utils/cowDataModel';
 import { useAuth } from '../contexts/AuthContext';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
-const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows = [], onUpdateCows }) => {
+const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, onPreferencesUpdate, cows = [], onUpdateCows, onManualNotificationCheck, onCreateTestTask, onCreateTimezoneTestTasks }) => {
   const { user, farmData, farm } = useAuth();
   
   console.log('⚙️ STEP 7: Settings received farmData:', farmData);
@@ -153,14 +153,15 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       '# IMPORTANT: Date format must be YYYY-MM-DD (example: 1995-03-15)',
       '# Tip: In Excel, format date column as "Text" to prevent auto-formatting',
       '# Category options: Cow, Heifer, Calf, Bull',
+      '# Gender options: Male, Female (required for proper categorization)',
       '# Production Status options (EXACT spelling required): Milking, Non-Milking, Dry',
       '# Reproductive Status will default to OPEN (add breeding records separately)',
       '# Tag numbers must be unique',
-      '# Required fields: tagNumber, dateOfBirth, category',
-      '# Optional fields: name, breed, productionStatus, sire, dam, location, notes, status'
+      '# Required fields: tagNumber, dateOfBirth, gender',
+      '# Optional fields: name, breed, category, productionStatus, sire, dam, location, notes, status'
     ];
     
-    const headers = ['tagNumber', 'name', 'dateOfBirth', 'category', 'breed', 'productionStatus', 'sire', 'dam', 'location', 'notes', 'status'];
+    const headers = ['tagNumber', 'name', 'dateOfBirth', 'gender', 'category', 'breed', 'productionStatus', 'sire', 'dam', 'location', 'notes', 'status'];
     
     // Create clean template with only headers (no sample data)
     let csvContent = instructions.join('\n') + '\n';
@@ -237,6 +238,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     const errors = [];
     const existingTags = new Set(cows.map(cow => cow.tagNumber));
     const validCategories = ['Cow', 'Heifer', 'Calf', 'Bull'];
+    const validGenders = ['Male', 'Female'];
     const validProductionStatuses = ['Milking', 'Non-Milking', 'Dry'];
     
     // Check for duplicates within the CSV file itself
@@ -281,9 +283,14 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         }
       }
       
-      if (!row.category?.trim()) {
-        rowErrors.push('Category is required');
-      } else if (!validCategories.includes(row.category)) {
+      if (!row.gender?.trim()) {
+        rowErrors.push('Gender is required');
+      } else if (!validGenders.includes(row.gender)) {
+        rowErrors.push(`Gender '${row.gender}' must be one of: ${validGenders.join(', ')}`);
+      }
+      
+      // Category is now optional (will be auto-calculated based on gender and age)
+      if (row.category?.trim() && !validCategories.includes(row.category)) {
         rowErrors.push(`Category '${row.category}' must be one of: ${validCategories.join(', ')}`);
       }
       
@@ -395,14 +402,20 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
         }
       }
       
+      // Determine proper category based on gender and age
+      const gender = row.gender?.trim() || 'Female';
+      const dateOfBirth = row.dateOfBirth.trim();
+      const hasCalved = false; // For imported animals, assume no calving history
+      const properCategory = determineCategoryByGenderAndAge(gender, dateOfBirth, hasCalved);
+      
       // Create base cow record with proper ID generation and timestamps
       const cowData = {
         tagNumber: row.tagNumber.trim(),
         name: row.name?.trim() || '',
-        dateOfBirth: row.dateOfBirth.trim(),
-        category: row.category.trim(),
+        dateOfBirth: dateOfBirth,
+        category: properCategory, // Use properly determined category
         breed: row.breed?.trim() || '',
-        gender: row.gender?.trim() || 'Female', // Default to Female for most cattle
+        gender: gender,
         sire: row.sire?.trim() || '',
         dam: row.dam?.trim() || '',
         location: row.location?.trim() || '',
@@ -462,13 +475,21 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
 
   // Notification Preferences State
   const [notifications, setNotifications] = useState({
+    enabled: true,
     emailNotifications: true,
     pushNotifications: true,
     alertFrequency: 'daily',
     breedingAlerts: true,
     healthAlerts: true,
     calvingAlerts: true,
-    pregnancyAlerts: true
+    pregnancyAlerts: true,
+    // Task notification settings
+    taskAssignmentAlerts: true,
+    highPriorityTaskAlerts: true,
+    taskDueDateAlerts: true,
+    quietHoursEnabled: false,
+    quietHoursStart: '22:00',
+    quietHoursEnd: '06:00'
   });
 
   // App Preferences State
@@ -477,7 +498,8 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     cowListSorting: 'name',
     dateFormat: 'MM/DD/YYYY',
     theme: 'light',
-    language: 'en'
+    language: 'en',
+    timezone: 'America/Chicago'
   });
 
   // Worker Management State
@@ -530,25 +552,145 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     }
   }, [user, profileData.farmCode, initializeFarmCode]);
 
-  // Load real farm members
-  useEffect(() => {
-    if (farm?.members) {
-      const realWorkers = farm.members.map(member => ({
-        id: member.email,
-        name: member.name || 'Unknown',
-        email: member.email,
-        role: member.email === farm.ownerEmail ? 'Owner' : 'Farm Member',
-        permissions: member.email === farm.ownerEmail ? 'full-access' : 'view-only',
-        active: true,
-        joinedDate: member.joinedDate || 'Unknown'
-      }));
-      setWorkers(realWorkers);
-      console.log('👥 WORKERS: Loaded real farm members:', realWorkers);
-    }
+      // Debug farm structure and load workers
+    useEffect(() => {
+      console.log('🔍 FARM DEBUG: Full farm object structure:', farm);
+      console.log('🔍 FARM DEBUG: All farm keys:', Object.keys(farm || {}));
+      console.log('🔍 FARM DEBUG: Looking for member data...');
+      
+      // Check if there's member data directly in farm object
+      if (farm) {
+        console.log('🔍 FARM DEBUG: Checking farm properties:', {
+          email: farm.email,
+          name: farm.name,
+          role: farm.role,
+          ownerEmail: farm.ownerEmail,
+          ownerName: farm.ownerName,
+          members: farm.members,
+          hasMembers: !!farm.members
+        });
+      }
+      
+      if (farm?.members) {
+        console.log('👥 DEBUG: Raw farm members data:', farm.members);
+        farm.members.forEach((member, index) => {
+          console.log(`👥 DEBUG: Member ${index}:`, {
+            email: member.email,
+            name: member.name,
+            nameType: typeof member.name,
+            nameValue: member.name,
+            displayName: member.displayName,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            allKeys: Object.keys(member)
+          });
+        });
+        
+        // Handle members array structure
+        const realWorkers = farm.members.map(member => {
+          // Try multiple ways to get the user's name with safety checks
+          let displayName = '';
+          
+          if (member.name && typeof member.name === 'string' && member.name.trim()) {
+            displayName = member.name.trim();
+          } else if (member.displayName && typeof member.displayName === 'string' && member.displayName.trim()) {
+            displayName = member.displayName.trim();
+          } else if (member.firstName || member.lastName) {
+            const firstName = member.firstName || '';
+            const lastName = member.lastName || '';
+            displayName = `${firstName} ${lastName}`.trim();
+          } else if (member.email && typeof member.email === 'string') {
+            // Fallback: use email prefix as name
+            displayName = member.email.split('@')[0].replace(/[._]/g, ' ');
+          } else {
+            displayName = 'Unknown User';
+          }
+          
+          // Ensure displayName is never empty
+          if (!displayName || displayName.trim() === '') {
+            displayName = member.email ? member.email.split('@')[0] : 'Unknown User';
+          }
+          
+          let role;
+          if (member.email === farm.ownerEmail) {
+            role = 'Owner';
+          } else {
+            // Auto-assign role based on permissions
+            switch(member.permissions) {
+              case 'full-access':
+                role = 'Manager';
+                break;
+              case 'limited-edit':
+                role = 'Supervisor';
+                break;
+              case 'view-only':
+              default:
+                role = 'Farm Hand';
+            }
+          }
+          
+          return {
+            id: member.email,
+            name: displayName,
+            email: member.email,
+            role: role,
+            permissions: member.permissions || 'view-only',
+            active: true,
+            joinedDate: member.joinedDate || 'Unknown'
+          };
+        });
+        
+        console.log('👥 DEBUG: Processed workers from members array:', realWorkers);
+        setWorkers(realWorkers);
+        console.log('👥 WORKERS: Loaded real farm members with auto-assigned roles:', realWorkers);
+      } else if (farm) {
+        // Handle individual member properties structure
+        console.log('👥 DEBUG: No members array found, checking individual properties');
+        
+        // Debug owner's profile data
+        console.log('👤 OWNER DEBUG: Owner profile data:', {
+          ownerName: profileData.ownerName,
+          userName: user?.displayName,
+          userEmail: user?.email,
+          farmOwnerEmail: farm?.ownerEmail
+        });
+        
+        const realWorkers = [];
+        
+        // Add the owner first
+        if (farm.ownerEmail && farm.ownerName) {
+          realWorkers.push({
+            id: farm.ownerEmail,
+            name: farm.ownerName,
+            email: farm.ownerEmail,
+            role: 'Owner',
+            permissions: 'full-access',
+            active: true,
+            joinedDate: farm.createdAt || 'Unknown'
+          });
+        }
+        
+        // If there's member data directly in farm object
+        if (farm.email && farm.email !== farm.ownerEmail) {
+          realWorkers.push({
+            id: farm.email,
+            name: farm.name || 'Unknown',
+            email: farm.email,
+            role: farm.role || 'Farm Hand',
+            permissions: 'view-only',
+            active: true,
+            joinedDate: farm.createdAt || 'Unknown'
+          });
+        }
+        
+        console.log('👥 DEBUG: Processed workers from individual properties:', realWorkers);
+        setWorkers(realWorkers);
+        console.log('👥 WORKERS: Loaded workers from farm data:', realWorkers);
+      }
   }, [farm]);
 
-  // Save settings to localStorage
-  const saveSettings = () => {
+  // Save settings to localStorage and Firestore
+  const saveSettings = async () => {
     const settings = {
       profile: profileData,
       farm: farmSettings,
@@ -560,6 +702,24 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     // Update parent component's profile data
     if (onProfileUpdate) {
       onProfileUpdate(profileData);
+    }
+    
+    // Update parent component's app preferences
+    if (onPreferencesUpdate) {
+      onPreferencesUpdate(appPreferences);
+    }
+    
+    // Save timezone to user's Firestore document
+    if (user?.uid) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          timezone: appPreferences.timezone,
+          updatedAt: new Date()
+        });
+        console.log('✅ Timezone saved to Firestore:', appPreferences.timezone);
+      } catch (error) {
+        console.error('❌ Error saving timezone to Firestore:', error);
+      }
     }
     
     setIsLoading(true);
@@ -661,6 +821,39 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
     window.location.reload();
   };
 
+  // Clear local data (for switching environments)
+  const clearLocalData = () => {
+    if (window.confirm('Clear all local data? This will remove cached tasks and settings. This is useful when switching between local and live environments.')) {
+      try {
+        // Clear task-related local storage
+        localStorage.removeItem('tasks');
+        localStorage.removeItem('lastTaskSync');
+        localStorage.removeItem('lastEnvironment');
+        
+        // Clear any other cached data
+        const keysToRemove = Object.keys(localStorage).filter(key => 
+          key.includes('task') || 
+          key.includes('cache') || 
+          key.includes('temp')
+        );
+        
+        keysToRemove.forEach(key => {
+          localStorage.removeItem(key);
+          console.log('🗑️ Removed local data:', key);
+        });
+        
+        console.log('🧹 Cleared local data for environment switch');
+        alert('Local data cleared successfully! The app will now use fresh data from the current environment.');
+        
+        // Reload to ensure fresh state
+        window.location.reload();
+      } catch (error) {
+        console.error('❌ Error clearing local data:', error);
+        alert('Error clearing local data: ' + error.message);
+      }
+    }
+  };
+
   // Data recovery function
   const recoverFromBackup = () => {
     const backupKeys = Object.keys(localStorage).filter(key => 
@@ -700,12 +893,28 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
   const handleUpdateWorkerPermissions = async (workerId, newPermissions) => {
     console.log('👥 UPDATE: Updating permissions for:', workerId, 'to:', newPermissions);
     
+    // Auto-assign role based on permission
+    let newRole;
+    switch(newPermissions) {
+      case 'full-access':
+        newRole = 'Manager';
+        break;
+      case 'limited-edit':
+        newRole = 'Supervisor';
+        break;
+      case 'view-only':
+        newRole = 'Farm Hand';
+        break;
+      default:
+        newRole = 'Farm Hand';
+    }
+    
     try {
       // Update in Firestore
       const farmRef = doc(db, 'farms', farm.farmCode);
       const updatedMembers = farm.members.map(member => 
         member.email === workerId 
-          ? { ...member, permissions: newPermissions, role: newPermissions === 'full-access' ? 'Manager' : 'Farm Hand' }
+          ? { ...member, permissions: newPermissions, role: newRole }
           : member
       );
       
@@ -714,7 +923,7 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
       // Update local state
       setWorkers(prev => prev.map(worker => 
         worker.id === workerId 
-          ? { ...worker, permissions: newPermissions, role: newPermissions === 'full-access' ? 'Manager' : 'Farm Hand' }
+          ? { ...worker, permissions: newPermissions, role: newRole }
           : worker
       ));
       
@@ -1289,6 +1498,125 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                       <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
+
+                  {/* Task Notifications */}
+                  <div className="mt-6 pt-6 border-t border-slate-200">
+                    <h4 className="font-medium text-slate-900 mb-4">Task Notifications</h4>
+                    
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                          <span className="text-sm">Task Assignment Alerts</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notifications.taskAssignmentAlerts}
+                            onChange={(e) => setNotifications(prev => ({ ...prev, taskAssignmentAlerts: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <AlertTriangle className="w-5 h-5 text-red-500" />
+                          <span className="text-sm">High Priority Task Alerts</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notifications.highPriorityTaskAlerts}
+                            onChange={(e) => setNotifications(prev => ({ ...prev, highPriorityTaskAlerts: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <Clock className="w-5 h-5 text-orange-500" />
+                          <span className="text-sm">Task Due Date Alerts</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notifications.taskDueDateAlerts}
+                            onChange={(e) => setNotifications(prev => ({ ...prev, taskDueDateAlerts: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Quiet Hours */}
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-medium text-slate-900">Quiet Hours</h4>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notifications.quietHoursEnabled}
+                            onChange={(e) => setNotifications(prev => ({ ...prev, quietHoursEnabled: e.target.checked }))}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+                      
+                      {notifications.quietHoursEnabled && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
+                            <input
+                              type="time"
+                              value={notifications.quietHoursStart}
+                              onChange={(e) => setNotifications(prev => ({ ...prev, quietHoursStart: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
+                            <input
+                              type="time"
+                              value={notifications.quietHoursEnd}
+                              onChange={(e) => setNotifications(prev => ({ ...prev, quietHoursEnd: e.target.value }))}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Notification Testing */}
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <h4 className="font-medium text-slate-900 mb-4">Test Notifications</h4>
+                      <div className="space-y-3">
+                        <button
+                          onClick={onManualNotificationCheck}
+                          className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                        >
+                          Check Notifications Now
+                        </button>
+                        <button
+                          onClick={onCreateTestTask}
+                          className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium"
+                        >
+                          Create Test Task
+                        </button>
+                        <button
+                          onClick={onCreateTimezoneTestTasks}
+                          className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                        >
+                          Create Timezone Test Tasks
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1382,6 +1710,49 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                     <option value="de">Deutsch</option>
                   </select>
                 </div>
+
+                {/* Timezone */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Timezone
+                  </label>
+                  <select
+                    value={appPreferences.timezone}
+                    onChange={async (e) => {
+                      const newTimezone = e.target.value;
+                      setAppPreferences(prev => ({ ...prev, timezone: newTimezone }));
+                      
+                      // Immediately save timezone to Firestore
+                      if (user?.uid) {
+                        try {
+                          await updateDoc(doc(db, 'users', user.uid), {
+                            timezone: newTimezone,
+                            updatedAt: new Date()
+                          });
+                          console.log('✅ Timezone updated in Firestore:', newTimezone);
+                        } catch (error) {
+                          console.error('❌ Error updating timezone in Firestore:', error);
+                        }
+                      }
+                    }}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="America/New_York">Eastern Time (ET)</option>
+                    <option value="America/Chicago">Central Time (CT)</option>
+                    <option value="America/Denver">Mountain Time (MT)</option>
+                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                    <option value="America/Anchorage">Alaska Time (AKT)</option>
+                    <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
+                    <option value="UTC">UTC</option>
+                    <option value="Europe/London">London (GMT/BST)</option>
+                    <option value="Europe/Paris">Paris (CET/CEST)</option>
+                    <option value="Asia/Tokyo">Tokyo (JST)</option>
+                    <option value="Australia/Sydney">Sydney (AEST/AEDT)</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Used for task notifications and due date calculations
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -1459,6 +1830,23 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                     className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
                   >
                     Recover Data
+                  </button>
+                </div>
+
+                {/* Clear Local Data */}
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-6">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Globe className="w-6 h-6 text-orange-600" />
+                    <h3 className="text-lg font-semibold text-orange-900">Clear Local Data</h3>
+                  </div>
+                  <p className="text-orange-700 mb-4">
+                    Clear cached tasks and settings. Useful when switching between local and live environments.
+                  </p>
+                  <button
+                    onClick={clearLocalData}
+                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Clear Local Data
                   </button>
                 </div>
 
@@ -1641,13 +2029,18 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                       <div className="flex items-center space-x-4">
                         <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center">
                           <span className="text-slate-600 font-medium">
-                            {worker.name.split(' ').map(n => n[0]).join('')}
+                            {worker.name && worker.name.trim() 
+                              ? worker.name.split(' ').map(n => n[0]).join('').toUpperCase()
+                              : worker.email ? worker.email[0].toUpperCase() : '?'
+                            }
                           </span>
                         </div>
                         <div>
-                          <h4 className="font-medium text-slate-900">{worker.name}</h4>
-                          <p className="text-sm text-slate-600">{worker.email}</p>
-                          <p className="text-sm text-slate-500">{worker.role}</p>
+                          <h4 className="font-medium text-slate-900">
+                            {worker.name || worker.email || 'Unknown User'}
+                          </h4>
+                          <p className="text-sm text-slate-600">{worker.email || 'No email'}</p>
+                          <p className="text-sm text-slate-500">{worker.role || 'Farm Hand'}</p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-4">
@@ -1914,16 +2307,14 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                       <ul className="space-y-1 text-blue-700">
                         <li>• <strong>tagNumber</strong> - Unique identifier</li>
                         <li>• <strong>dateOfBirth</strong> - YYYY-MM-DD format</li>
-                        <li>• <strong>category</strong> - Animal type</li>
+                        <li>• <strong>gender</strong> - Male or Female</li>
                       </ul>
                     </div>
                     <div>
-                      <p className="font-medium text-blue-800 mb-2">Category options:</p>
+                      <p className="font-medium text-blue-800 mb-2">Gender options:</p>
                       <ul className="space-y-1 text-blue-700">
-                        <li>• <strong>Cow</strong> - Adult female</li>
-                        <li>• <strong>Heifer</strong> - Young female</li>
-                        <li>• <strong>Calf</strong> - Young animal</li>
-                        <li>• <strong>Bull</strong> - Male animal</li>
+                        <li>• <strong>Male</strong> - Will be categorized as "Bull"</li>
+                        <li>• <strong>Female</strong> - Will be categorized as Calf/Heifer/Cow based on age</li>
                       </ul>
                     </div>
                   </div>
@@ -2044,7 +2435,31 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
                 </label>
                 <select
                   value={editingWorker.permissions}
-                  onChange={(e) => setEditingWorker(prev => ({ ...prev, permissions: e.target.value }))}
+                  onChange={(e) => {
+                    const newPermissions = e.target.value;
+                    let newRole;
+                    
+                    // Auto-assign role based on permission
+                    switch(newPermissions) {
+                      case 'full-access':
+                        newRole = 'Manager';
+                        break;
+                      case 'limited-edit':
+                        newRole = 'Supervisor';
+                        break;
+                      case 'view-only':
+                        newRole = 'Farm Hand';
+                        break;
+                      default:
+                        newRole = 'Farm Hand';
+                    }
+                    
+                    setEditingWorker(prev => ({ 
+                      ...prev, 
+                      permissions: newPermissions,
+                      role: newRole 
+                    }));
+                  }}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="view-only">View Only - Can see data but not edit</option>
@@ -2055,19 +2470,11 @@ const SettingsView = ({ profileData: initialProfileData, onProfileUpdate, cows =
               
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Role Title
+                  Role Title (Auto-assigned)
                 </label>
-                <select
-                  value={editingWorker.role}
-                  onChange={(e) => setEditingWorker(prev => ({ ...prev, role: e.target.value }))}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="Farm Hand">Farm Hand</option>
-                  <option value="Manager">Manager</option>
-                  <option value="Veterinarian">Veterinarian</option>
-                  <option value="Supervisor">Supervisor</option>
-                  <option value="Intern">Intern</option>
-                </select>
+                <div className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50 text-slate-600">
+                  {editingWorker.role}
+                </div>
               </div>
             </div>
             

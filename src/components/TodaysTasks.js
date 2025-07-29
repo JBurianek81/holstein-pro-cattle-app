@@ -5,8 +5,12 @@ import {
   AlertTriangle, 
   CheckCircle, 
   Plus,
-  X
+  X,
+  Bug
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import taskService from '../utils/taskService';
+import TaskDebugPanel from './TaskDebugPanel';
 
 const ASSIGNEES = [
   { id: 'jason', name: 'Jason Burianek' },
@@ -15,6 +19,7 @@ const ASSIGNEES = [
 ];
 
 const TodaysTasks = ({ cows }) => {
+  const { user, farm } = useAuth();
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
@@ -24,39 +29,80 @@ const TodaysTasks = ({ cows }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [taskToComplete, setTaskToComplete] = useState(null);
   const [newTask, setNewTask] = useState({
-    name: '',
+    title: '',
     dueDate: todayStr,
     priority: 'medium',
-    assignee: ASSIGNEES[0].id,
+    assignedTo: user?.email || '',
     description: ''
   });
   const [formErrors, setFormErrors] = useState({});
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [completedTaskIds, setCompletedTaskIds] = useState([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
-  // Load user tasks from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('todaysTasks');
-    if (saved) setUserTasks(JSON.parse(saved));
-    const completed = localStorage.getItem('todaysTasksCompleted');
-    if (completed) setCompletedTaskIds(JSON.parse(completed));
-  }, []);
+  // Get farm members for assignment dropdown (including owner)
+  const getFarmMembers = () => {
+    const members = [];
+    
+    // Add owner first
+    if (farm?.ownerEmail && farm?.ownerName) {
+      members.push({
+        email: farm.ownerEmail,
+        name: farm.ownerName,
+        role: 'Owner'
+      });
+    }
+    
+    // Add other members
+    if (farm?.members) {
+      farm.members.forEach(member => {
+        // Skip if this member is the owner (already added)
+        if (member.email === farm.ownerEmail) return;
+        
+        members.push({
+          email: member.email,
+          name: member.name || member.displayName || member.email.split('@')[0],
+          role: member.role || 'Member'
+        });
+      });
+    }
+    
+    return members;
+  };
 
-  // Save user tasks to localStorage
+  // Load user tasks from Firestore with real-time updates
   useEffect(() => {
-    localStorage.setItem('todaysTasks', JSON.stringify(userTasks));
-  }, [userTasks]);
-  useEffect(() => {
-    localStorage.setItem('todaysTasksCompleted', JSON.stringify(completedTaskIds));
-  }, [completedTaskIds]);
+    if (!user?.email || !user?.farmCode) {
+      console.log('📝 TASKS: No user email or farm code available');
+      return;
+    }
 
-  // Get only user-created tasks - no automatic tasks
+    setLoading(true);
+    console.log('📝 TASKS: Setting up real-time listener for user:', user.email);
+    console.log('📝 TASKS: Farm code:', user.farmCode);
+
+    const unsubscribe = taskService.loadUserTasks(user.email, user.farmCode, (tasks) => {
+      console.log('📝 TASKS: Real-time update received:', tasks);
+      setUserTasks(tasks);
+      setLastSync(new Date());
+      setLoading(false);
+    });
+
+    return () => {
+      console.log('📝 TASKS: Cleaning up real-time listener');
+      unsubscribe();
+    };
+  }, [user?.email, user?.farmCode]);
+
+  // Get tasks for display
   const getTodaysTasks = () => {
     const tasks = [];
     
-    // Only user-created tasks - show ALL incomplete tasks regardless of date
+    // Show all pending tasks regardless of date
     userTasks.forEach(task => {
-      if (!completedTaskIds.includes(task.id)) {
+      if (task.status !== 'completed' && !task.completed) {
         const isOverdue = task.dueDate < todayStr;
         const daysOverdue = isOverdue ? Math.floor((today - new Date(task.dueDate)) / (1000 * 60 * 60 * 24)) : 0;
         
@@ -131,33 +177,68 @@ const TodaysTasks = ({ cows }) => {
     setFormErrors({});
     setShowAddModal(true);
     setNewTask({
-      name: '',
+      title: '',
       dueDate: todayStr,
       priority: 'medium',
-      assignee: ASSIGNEES[0].id,
+      assignedTo: user?.email || '',
       description: ''
     });
   };
   
-  const handleSaveTask = (e) => {
+  const handleSaveTask = async (e) => {
     e.preventDefault();
+    console.log('🌐 LIVE SITE: handleSaveTask called');
+    console.log('🌐 LIVE SITE: New task data:', newTask);
+    console.log('🌐 LIVE SITE: Current user:', user);
+    console.log('🌐 LIVE SITE: User email:', user?.email);
+    console.log('🌐 LIVE SITE: User farm code:', user?.farmCode);
+    
     // Validate
     const errors = {};
-    if (!newTask.name.trim()) errors.name = 'Task name is required';
+    if (!newTask.title.trim()) errors.title = 'Task title is required';
     if (!newTask.dueDate) errors.dueDate = 'Due date is required';
     if (!newTask.priority) errors.priority = 'Priority is required';
-    if (!newTask.assignee) errors.assignee = 'Assignee is required';
+    if (!newTask.assignedTo) errors.assignedTo = 'Assignee is required';
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) return;
-    // Save
-    setUserTasks(prev => [
-      ...prev,
-      {
-        ...newTask,
-        id: 'user-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5)
+
+    try {
+      console.log('🌐 LIVE SITE: About to call taskService.createTask...');
+      console.log('🌐 LIVE SITE: Task data being passed:', newTask);
+      console.log('🌐 LIVE SITE: User being passed:', user);
+      
+      const result = await taskService.createTask(newTask, user);
+      
+      console.log('🌐 LIVE SITE: taskService.createTask result:', result);
+      
+      if (result.success) {
+        console.log('✅ LIVE SITE: Task created successfully:', result.taskId);
+        setShowAddModal(false);
+        // The real-time listener will update the tasks automatically
+      } else {
+        console.error('❌ TASKS: Failed to create task:', result.error);
+        alert(`Failed to create task: ${result.error}`);
       }
-    ]);
-    setShowAddModal(false);
+    } catch (error) {
+      console.error('❌ LIVE SITE: Error creating task:', error);
+      console.error('❌ LIVE SITE: Error code:', error.code);
+      console.error('❌ LIVE SITE: Error message:', error.message);
+      console.error('❌ LIVE SITE: Error stack:', error.stack);
+      
+      // Show detailed error to user
+      let errorMessage = 'Error creating task';
+      if (error.code === 'permission-denied') {
+        errorMessage = 'Permission denied. Please check your authentication.';
+      } else if (error.code === 'unavailable') {
+        errorMessage = 'Firebase service unavailable. Please try again.';
+      } else if (error.code === 'unauthenticated') {
+        errorMessage = 'You are not authenticated. Please log in again.';
+      } else {
+        errorMessage = error.message || 'Unknown error occurred';
+      }
+      
+      alert(`Error creating task: ${errorMessage}`);
+    }
   };
 
   const handleCompleteTask = (taskId) => {
@@ -166,9 +247,24 @@ const TodaysTasks = ({ cows }) => {
     setShowConfirmModal(true);
   };
 
-  const confirmCompleteTask = () => {
+  const confirmCompleteTask = async () => {
     if (taskToComplete) {
-      setCompletedTaskIds(prev => [...prev, taskToComplete.id]);
+      try {
+        console.log('📝 TASKS: Completing task:', taskToComplete.id);
+        
+        const result = await taskService.completeTask(taskToComplete.id);
+        
+        if (result.success) {
+          console.log('✅ TASKS: Task completed successfully');
+          // The real-time listener will update the tasks automatically
+        } else {
+          console.error('❌ TASKS: Failed to complete task:', result.error);
+          alert(`Failed to complete task: ${result.error}`);
+        }
+      } catch (error) {
+        console.error('❌ TASKS: Error completing task:', error);
+        alert(`Error completing task: ${error.message}`);
+      }
     }
     setShowConfirmModal(false);
     setTaskToComplete(null);
@@ -192,14 +288,34 @@ const TodaysTasks = ({ cows }) => {
               {tasks.filter(t => t.overdue).length} overdue
             </span>
           )}
+          {loading && (
+            <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-sm font-medium">
+              Loading...
+            </span>
+          )}
+          {lastSync && (
+            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+              Synced {lastSync.toLocaleTimeString()}
+            </span>
+          )}
         </div>
-        <button
-          onClick={handleAddTask}
-          className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Task</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={() => setShowDebugPanel(true)}
+            className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium shadow"
+            title="Debug Task Sync Issues"
+          >
+            <Bug className="w-4 h-4" />
+            <span>Debug</span>
+          </button>
+          <button
+            onClick={handleAddTask}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Task</span>
+          </button>
+        </div>
       </div>
       <div className="p-6">
         {tasks.length === 0 ? (
@@ -213,7 +329,7 @@ const TodaysTasks = ({ cows }) => {
             {tasks.map((task) => {
               const IconComponent = task.icon || Calendar;
               const isExpanded = expandedTaskId === task.id;
-              const assigneeName = ASSIGNEES.find(a => a.id === task.assignee)?.name || 'Unassigned';
+              const assigneeName = task.assignedTo || 'Unassigned';
               return (
                 <div
                   key={task.id}
@@ -230,7 +346,7 @@ const TodaysTasks = ({ cows }) => {
                     <input
                       type="checkbox"
                       className="mr-4 w-5 h-5 accent-green-600"
-                      checked={completedTaskIds.includes(task.id)}
+                      checked={task.completed || task.status === 'completed'}
                       onChange={() => handleCompleteTask(task.id)}
                     />
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
@@ -242,7 +358,7 @@ const TodaysTasks = ({ cows }) => {
                     </div>
                     <div className="flex-1 ml-4">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-slate-900">{task.name}</h4>
+                        <h4 className="font-medium text-slate-900">{task.title}</h4>
                         <div className="flex items-center space-x-2">
                           {getPriorityIcon(task.priority)}
                           <span className={`text-sm ${getDueDateColor(task)}`}>
@@ -261,6 +377,9 @@ const TodaysTasks = ({ cows }) => {
                           {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
                         </span>
                         <span className="text-xs text-slate-500">Assigned to: {assigneeName}</span>
+                        {task.createdBy && (
+                          <span className="text-xs text-slate-500">Created by: {task.createdBy}</span>
+                        )}
                         <span className={`text-xs ${getDueDateColor(task)}`}>
                           Due: {new Date(task.dueDate).toLocaleDateString()}
                         </span>
@@ -303,15 +422,15 @@ const TodaysTasks = ({ cows }) => {
             <h3 className="text-xl font-bold text-slate-900 mb-6">Add New Task</h3>
             <form onSubmit={handleSaveTask} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Task Name<span className="text-red-500 ml-1">*</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Task Title<span className="text-red-500 ml-1">*</span></label>
                 <input
                   type="text"
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.name ? 'border-red-400' : 'border-slate-300'}`}
-                  value={newTask.name}
-                  onChange={e => setNewTask({ ...newTask, name: e.target.value })}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.title ? 'border-red-400' : 'border-slate-300'}`}
+                  value={newTask.title}
+                  onChange={e => setNewTask({ ...newTask, title: e.target.value })}
                   required
                 />
-                {formErrors.name && <p className="text-xs text-red-500 mt-1">{formErrors.name}</p>}
+                {formErrors.title && <p className="text-xs text-red-500 mt-1">{formErrors.title}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Due Date<span className="text-red-500 ml-1">*</span></label>
@@ -341,16 +460,19 @@ const TodaysTasks = ({ cows }) => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Assign To<span className="text-red-500 ml-1">*</span></label>
                 <select
-                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.assignee ? 'border-red-400' : 'border-slate-300'}`}
-                  value={newTask.assignee}
-                  onChange={e => setNewTask({ ...newTask, assignee: e.target.value })}
+                  className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.assignedTo ? 'border-red-400' : 'border-slate-300'}`}
+                  value={newTask.assignedTo}
+                  onChange={e => setNewTask({ ...newTask, assignedTo: e.target.value })}
                   required
                 >
-                  {ASSIGNEES.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
+                  <option value="">Select a team member</option>
+                  {getFarmMembers().map(member => (
+                    <option key={member.email} value={member.email}>
+                      {member.name} ({member.role}) - {member.email}
+                    </option>
                   ))}
                 </select>
-                {formErrors.assignee && <p className="text-xs text-red-500 mt-1">{formErrors.assignee}</p>}
+                {formErrors.assignedTo && <p className="text-xs text-red-500 mt-1">{formErrors.assignedTo}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
@@ -400,6 +522,12 @@ const TodaysTasks = ({ cows }) => {
           </div>
         </div>
       )}
+
+      {/* Debug Panel */}
+      <TaskDebugPanel 
+        isOpen={showDebugPanel} 
+        onClose={() => setShowDebugPanel(false)} 
+      />
     </div>
   );
 };

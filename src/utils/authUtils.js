@@ -54,7 +54,16 @@ export const createFarm = async (farmData) => {
       name: farmData.farmName,
       ownerName: farmData.ownerName,
       ownerEmail: farmData.email,
-      members: [farmData.email], // Owner is first member
+      members: [
+        {
+          email: farmData.email,
+          name: farmData.ownerName,
+          displayName: farmData.ownerName,
+          role: 'Owner',
+          permissions: 'full-access',
+          joinedDate: new Date().toISOString()
+        }
+      ],
       settings: {
         operationType: farmData.operationType || 'Dairy',
         herdSize: farmData.herdSize || '100-500',
@@ -121,41 +130,59 @@ export const addMemberToFarm = async (farmCode, userEmail) => {
 };
 
 export const joinFarmByCode = async (farmCode, user) => {
+  console.log('🏭 JOIN: joinFarmByCode called with:', { farmCode, userEmail: user?.email });
+  
   try {
-    console.log('🏭 JOIN: User joining farm with code:', farmCode);
-    console.log('🏭 JOIN: User data:', user);
-    
     const farmRef = doc(db, 'farms', farmCode);
     const farmSnap = await getDoc(farmRef);
     
+    console.log('🏭 JOIN: Farm document exists:', farmSnap.exists());
+    
     if (farmSnap.exists()) {
       const farmData = farmSnap.data();
+      console.log('🏭 JOIN: Current farm data:', farmData);
+      console.log('🏭 JOIN: Current members array:', farmData.members);
+      
+      // Get existing members array or create new one
+      const existingMembers = farmData.members || [];
+      console.log('🏭 JOIN: Existing members count:', existingMembers.length);
+      
       const newMember = {
         email: user.email,
-        name: user.displayName || user.email.split('@')[0],
+        name: user.displayName || user.email?.split('@')[0] || 'Unknown',
+        displayName: user.displayName,
         joinedDate: new Date().toISOString(),
-        role: 'member'
+        role: 'member',
+        permissions: 'view-only'
       };
       
-      // Add to members array if not already there
-      const existingMembers = farmData.members || [];
+      console.log('🏭 JOIN: New member object:', newMember);
+      
+      // Check if already a member
       const isAlreadyMember = existingMembers.some(member => member.email === user.email);
+      console.log('🏭 JOIN: Is already member:', isAlreadyMember);
       
       if (!isAlreadyMember) {
         const updatedMembers = [...existingMembers, newMember];
-        await updateDoc(farmRef, { members: updatedMembers });
-        console.log('👥 JOIN: Added new member to farm:', newMember);
+        console.log('🏭 JOIN: Updated members array:', updatedMembers);
+        
+        await updateDoc(farmRef, { 
+          members: updatedMembers 
+        });
+        
+        console.log('✅ JOIN: Successfully added member to farm');
+        return { success: true, message: 'Successfully joined farm' };
       } else {
-        console.log('👥 JOIN: User is already a member of this farm');
+        console.log('ℹ️ JOIN: User already a member');
+        return { success: true, message: 'Already a member of this farm' };
       }
-      
-      return { success: true, farm: farmData };
     } else {
-      return { success: false, error: 'Farm not found' };
+      console.log('❌ JOIN: Farm not found');
+      return { success: false, message: 'Farm code not found' };
     }
   } catch (error) {
-    console.error('❌ Error joining farm:', error);
-    return { success: false, error: 'Failed to join farm' };
+    console.error('❌ JOIN: Error joining farm:', error);
+    return { success: false, message: 'Error joining farm: ' + error.message };
   }
 };
 

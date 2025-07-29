@@ -213,21 +213,60 @@ export const getCategoryByAge = (dateOfBirth, gender) => {
   const ageInMonths = (new Date() - new Date(dateOfBirth)) / (1000 * 60 * 60 * 24 * 30.44);
 
   if (gender === 'Male') {
-    return ageInMonths >= 24 ? 'Bull' : 'Calf';
+    return 'Bull'; // Male cattle are always "Bull" regardless of age
   } else {
-    if (ageInMonths < 15) return 'Calf';
+    if (ageInMonths < 12) return 'Calf';
     if (ageInMonths < 24) return 'Heifer';
     return 'Cow';
   }
 };
 
-// Helper to check and update category based on age (Calf → Heifer)
-export function updateCategoryByAge(cow) {
-  if (!cow || !cow.dateOfBirth || cow.gender !== 'Female') return cow;
-  const ageInMonths = (new Date() - new Date(cow.dateOfBirth)) / (1000 * 60 * 60 * 24 * 30.44);
-  if (cow.category === 'Calf' && ageInMonths >= 9) {
-    return { ...cow, category: 'Heifer' };
+// Enhanced function that properly categorizes animals by gender and age
+export const determineCategoryByGenderAndAge = (gender, dateOfBirth, hasCalved = false) => {
+  if (gender === 'Male') {
+    return 'Bull'; // Male cattle are always "Bull" at any age
   }
+  
+  if (gender === 'Female') {
+    if (!dateOfBirth) return 'Calf';
+    
+    const birthDate = new Date(dateOfBirth);
+    const now = new Date();
+    const ageInMonths = (now - birthDate) / (1000 * 60 * 60 * 24 * 30.44);
+    
+    if (ageInMonths < 12) {
+      return 'Calf';
+    } else if (ageInMonths < 24 && !hasCalved) {
+      return 'Heifer';
+    } else {
+      return 'Cow';
+    }
+  }
+  
+  return 'Cow'; // Default fallback
+};
+
+// Helper to check and update category based on age and gender
+export function updateCategoryByAge(cow) {
+  if (!cow || !cow.dateOfBirth) return cow;
+  
+  // For male animals, always ensure they are categorized as "Bull"
+  if (cow.gender === 'Male' && cow.category !== 'Bull') {
+    return { ...cow, category: 'Bull' };
+  }
+  
+  // For female animals, handle age-based transitions
+  if (cow.gender === 'Female') {
+    const ageInMonths = (new Date() - new Date(cow.dateOfBirth)) / (1000 * 60 * 60 * 24 * 30.44);
+    const hasCalved = cow.calvingRecords && cow.calvingRecords.length > 0;
+    
+    if (cow.category === 'Calf' && ageInMonths >= 12) {
+      return { ...cow, category: 'Heifer' };
+    } else if (cow.category === 'Heifer' && (ageInMonths >= 24 || hasCalved)) {
+      return { ...cow, category: 'Cow' };
+    }
+  }
+  
   return cow;
 }
 
@@ -303,12 +342,15 @@ export const createCalfFromCalving = (calvingData, motherCow) => {
     sire = mostRecentBreeding.bullName || mostRecentBreeding.semenId || '';
   }
 
+  // Determine proper category based on gender and age
+  const properCategory = determineCategoryByGenderAndAge(calvingData.calfGender, calvingData.date);
+  
   return createCowRecord({
     tagNumber: calvingData.calfTag,
     name: `Calf ${calvingData.calfTag}`,
     dateOfBirth: calvingData.date,
     gender: calvingData.calfGender,
-    category: 'Calf',
+    category: properCategory, // Use properly determined category
     status: 'Active',
     productionStatus: 'Non-Milking',
     breed: motherCow.breed || 'Holstein', // Inherit breed from mother
