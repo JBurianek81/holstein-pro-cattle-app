@@ -335,33 +335,69 @@ export const createCalvingRecord = (data = {}) => {
 
 // Create a new calf record from calving data
 export const createCalfFromCalving = (calvingData, motherCow) => {
+  console.log('🐄 CALF CREATION DEBUG: Starting createCalfFromCalving');
+  console.log('🐄 CALF CREATION DEBUG: Calving data:', calvingData);
+  console.log('🐄 CALF CREATION DEBUG: Mother cow:', motherCow);
+  
   // Get the sire from mother's most recent breeding record
   let sire = '';
   if (motherCow.breedingRecords && motherCow.breedingRecords.length > 0) {
     const mostRecentBreeding = motherCow.breedingRecords[motherCow.breedingRecords.length - 1];
     sire = mostRecentBreeding.bullName || mostRecentBreeding.semenId || '';
+    console.log('🐄 CALF CREATION DEBUG: Found sire from breeding record:', sire);
+  } else {
+    console.log('🐄 CALF CREATION DEBUG: No breeding records found for sire');
   }
 
-  // Determine proper category based on gender and age
-  const properCategory = determineCategoryByGenderAndAge(calvingData.calfGender, calvingData.date);
-  
-  return createCowRecord({
+  // CRITICAL: Ensure all required fields are explicitly set for HerdManagement
+  const calfRecord = createCowRecord({
+    // Core identity fields (REQUIRED)
     tagNumber: calvingData.calfTag,
     name: `Calf ${calvingData.calfTag}`,
     dateOfBirth: calvingData.date,
-    gender: calvingData.calfGender,
-    category: properCategory, // Use properly determined category
+    gender: calvingData.calfGender || 'Female',
+    
+    // CRITICAL: Explicitly set category to 'Calf' for newborns
+    category: 'Calf', // Force category to 'Calf' for newborn calves
+    
+    // Status fields (REQUIRED for HerdManagement filtering)
     status: 'Active',
     productionStatus: 'Non-Milking',
-    breed: motherCow.breed || 'Holstein', // Inherit breed from mother
-    dam: motherCow.name || motherCow.tagNumber || '', // Mother becomes the dam
-    sire: sire, // Sire from most recent breeding record
-    notes: `Born to ${motherCow.name} (${motherCow.tagNumber}) on ${calvingData.date}`,
-    // Initialize empty record arrays
+    reproductiveStatus: 'N/A', // Calves don't have reproductive status
+    
+    // Breed and parent information
+    breed: motherCow.breed || 'Holstein',
+    dam: motherCow.name || motherCow.tagNumber || '',
+    sire: sire,
+    
+    // CRITICAL: Ensure archived is explicitly false
+    archived: false,
+    archiveReason: '',
+    
+    // Location and notes
+    location: motherCow.location || '',
+    notes: `Born to ${motherCow.name || motherCow.tagNumber} on ${calvingData.date}`,
+    
+    // Initialize all record arrays (REQUIRED)
     healthRecords: [],
     breedingRecords: [],
-    calvingRecords: []
+    calvingRecords: [],
+    
+    // Reproductive tracking (REQUIRED)
+    isInHeat: false,
+    
+    // Timestamps
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   });
+  
+  console.log('🐄 CALF CREATION DEBUG: Created calf record with ALL required fields:', calfRecord);
+  console.log('🐄 CALF CREATION DEBUG: Category explicitly set to:', calfRecord.category);
+  console.log('🐄 CALF CREATION DEBUG: Status explicitly set to:', calfRecord.status);
+  console.log('🐄 CALF CREATION DEBUG: Archived explicitly set to:', calfRecord.archived);
+  console.log('🐄 CALF CREATION DEBUG: Production status set to:', calfRecord.productionStatus);
+  
+  return calfRecord;
 };
 
 // Dropdown options for records

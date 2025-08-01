@@ -36,6 +36,8 @@ import {
   COMPLICATIONS,
   updateCategoryByAge // <-- import the new helper
 } from '../utils/cowDataModel';
+import cattleService from '../utils/cattleService';
+import { useAuth } from '../contexts/AuthContext';
 
 
 // Helper function for consistent date formatting
@@ -568,6 +570,7 @@ const CalvingRecordsTab = memo(({ cow, onAddRecord, onEditRecord, onDeleteRecord
 });
 
 const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = [], onBreedingRecordSaved, onBreedingRecordDeleted, onAddCow, cows = [], onUpdateBullInventory }) => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [showAddRecordModal, setShowAddRecordModal] = useState(null);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -667,7 +670,7 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
     }
   };
 
-  const handleSaveRecord = (recordType, recordData) => {
+  const handleSaveRecord = async (recordType, recordData) => {
     console.log('🐄 SAVE RECORD: Starting save operation:', {
       recordType,
       cowName: normalizedCow.name,
@@ -744,37 +747,27 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           if (onBreedingRecordSaved && recordData.semenId) {
             onBreedingRecordSaved(updatedCow, newRecord, recordData.semenId, false, null);
           }
-          
-          // Auto-create calf if tag number is provided and not editing existing record
-          if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && onAddCow) {
-            try {
-              // Check if calf tag already exists in herd
-              const existingCalf = cows?.find(c => c.tagNumber === recordData.calfTag.trim());
-              if (existingCalf) {
-                console.warn('Calf with tag number', recordData.calfTag, 'already exists in herd');
-                // Show warning toast or alert
-                alert(`Warning: A calf with tag number ${recordData.calfTag} already exists in the herd.`);
-                break;
-              }
-              
-              // Create new calf record
-              const newCalf = createCalfFromCalving(recordData, normalizedCow);
-              console.log('Auto-creating new calf:', newCalf.name, 'Tag:', newCalf.tagNumber);
-              
-              // Add calf to herd
-              onAddCow(newCalf);
-              
-              // Show success message
-              setToastMessage(`Calf ${recordData.calfTag} successfully added to herd!`);
-              setShowToast(true);
-              setTimeout(() => setShowToast(false), 3000);
-            } catch (error) {
-              console.error('Error creating calf:', error);
-              alert('Error creating calf record. Please try again.');
-            }
-          }
           break;
         case 'calving':
+          console.log('🐄 CALVING DEBUG: Processing calving record');
+          console.log('🐄 CALVING DEBUG: Record data:', recordData);
+          console.log('🐄 CALVING DEBUG: Calf tag:', recordData.calfTag);
+          console.log('🐄 CALVING DEBUG: Calf date:', recordData.date);
+          console.log('🐄 CALVING DEBUG: Calf gender:', recordData.calfGender);
+          console.log('🐄 CALVING DEBUG: Editing record?', !!editingRecord);
+          console.log('🐄 CALVING DEBUG: All recordData keys:', Object.keys(recordData));
+          console.log('🐄 CALVING DEBUG: recordData.calfTagNumber:', recordData.calfTagNumber);
+          console.log('🐄 CALVING DEBUG: recordData.calfDateOfBirth:', recordData.calfDateOfBirth);
+          
+          // 🚨 CRITICAL: Debug the calf creation condition
+          console.log('🚨 CALF CONDITION DEBUG: Checking each condition:');
+          console.log('🚨 CALF CONDITION DEBUG: !editingRecord:', !editingRecord);
+          console.log('🚨 CALF CONDITION DEBUG: recordData.calfTag:', recordData.calfTag);
+          console.log('🚨 CALF CONDITION DEBUG: recordData.calfTag.trim():', recordData.calfTag?.trim());
+          console.log('🚨 CALF CONDITION DEBUG: recordData.calfHealth:', recordData.calfHealth);
+          console.log('🚨 CALF CONDITION DEBUG: recordData.calfHealth !== "Deceased":', recordData.calfHealth !== 'Deceased');
+          console.log('🚨 CALF CONDITION DEBUG: Final condition result:', !!(recordData.calfTag && recordData.calfTag.trim() !== '' && recordData.calfHealth !== 'Deceased'));
+          
           newRecord = createCalvingRecord(recordData);
           updatedCow.calvingRecords = [...normalizedCow.calvingRecords, newRecord];
           console.log('Added calving record to cow:', normalizedCow.name);
@@ -786,8 +779,15 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           }
           
           // Automatic calf addition to herd (if calf is alive)
+          console.log('🐄 CALF CREATION CHECK: Starting calf creation check');
+          console.log('🐄 CALF CREATION CHECK: !editingRecord:', !editingRecord);
+          console.log('🐄 CALF CREATION CHECK: recordData.calfTag:', recordData.calfTag);
+          console.log('🐄 CALF CREATION CHECK: recordData.calfTag.trim():', recordData.calfTag?.trim());
+          console.log('🐄 CALF CREATION CHECK: recordData.calfHealth:', recordData.calfHealth);
+          console.log('🐄 CALF CREATION CHECK: Condition met?', !!(recordData.calfTag && recordData.calfTag.trim() !== '' && recordData.calfHealth !== 'Deceased'));
+          
           if (!editingRecord && recordData.calfTag && recordData.calfTag.trim() !== '' && 
-              recordData.calfHealth !== 'Deceased' && onAddCow) {
+              recordData.calfHealth !== 'Deceased') {
             try {
               // Check if calf tag already exists in herd
               const existingCalf = cows?.find(c => c.tagNumber === recordData.calfTag.trim());
@@ -799,13 +799,19 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
                 const newCalf = createCalfFromCalving(recordData, normalizedCow);
                 console.log('Auto-creating new calf:', newCalf.name, 'Tag:', newCalf.tagNumber);
                 
-                // Add calf to herd
-                onAddCow(newCalf);
+                // Add calf to herd using cattleService for proper Firestore saving
+                const result = await cattleService.addCow(newCalf, user.farmCode, user.email);
                 
-                // Show success message
-                setToastMessage(`Calf ${recordData.calfTag} successfully added to herd!`);
-                setShowToast(true);
-                setTimeout(() => setShowToast(false), 3000);
+                if (result.success) {
+                  console.log('✅ New calf added to herd:', newCalf.tagNumber);
+                  // Show success message
+                  setToastMessage(`Calf ${recordData.calfTag} successfully added to herd!`);
+                  setShowToast(true);
+                  setTimeout(() => setShowToast(false), 3000);
+                } else {
+                  console.error('❌ Failed to add calf to herd:', result.error);
+                  alert(`Error creating calf record: ${result.error}`);
+                }
               }
             } catch (error) {
               console.error('Error creating calf:', error);
@@ -817,6 +823,14 @@ const CowProfileModal = ({ isOpen, onClose, cow, onUpdateCow, bullInventory = []
           // The calculateReproductiveStatus function now prioritizes recent calving records
           // and will return OPEN status for cows that have recently calved
           console.log('Calving record saved for:', normalizedCow.name, '- reproductive status will be recalculated automatically');
+          
+          // Debug calf creation conditions
+          console.log('🐄 CALF CONDITION DEBUG: About to check calf creation');
+          console.log('🐄 CALF CONDITION DEBUG: !editingRecord:', !editingRecord);
+          console.log('🐄 CALF CONDITION DEBUG: recordData.calfTag:', recordData.calfTag);
+          console.log('🐄 CALF CONDITION DEBUG: recordData.calfTagNumber:', recordData.calfTagNumber);
+          console.log('🐄 CALF CONDITION DEBUG: recordData.calfDateOfBirth:', recordData.calfDateOfBirth);
+          console.log('🐄 CALF CONDITION DEBUG: Will create calf?', !!(recordData.calfTag && recordData.calfTag.trim() !== ''));
           break;
         default:
           console.error('Unknown record type:', recordType);

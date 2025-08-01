@@ -1,8 +1,27 @@
-import React from 'react';
-import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Check, Download, X, Archive, Activity, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Users, Search, Plus, Edit3, Trash2, MoreVertical, Tag, Calendar, Activity, Filter, ChevronDown, ChevronUp, SortAsc, SortDesc, Download, X, Archive } from 'lucide-react';
 import { calculateReproductiveStatus, getReproductiveStatusBadge, getProductionStatusBadge, calculateHealthScore, getHealthScoreBadge } from '../utils/cowDataModel';
 
 const HerdManagement = ({ cows, sortBy = 'name', onAddCow, onEditCow, onDeleteCow, onViewProfile, onArchiveCow }) => {
+  // 🐄 HERD MANAGEMENT DEBUG: Component received cows from props
+  console.log('🐄 HERD MANAGEMENT DEBUG: Component received', cows.length, 'total cows');
+  console.log('🐄 HERD MANAGEMENT DEBUG: All cow data:', cows.map(cow => ({
+    name: cow.name,
+    tagNumber: cow.tagNumber,
+    category: cow.category,
+    archived: cow.archived,
+    status: cow.status
+  })));
+  
+  // Check specifically for calf 8140A
+  const targetCalf = cows.find(cow => cow.tagNumber === '8140A');
+  if (targetCalf) {
+    console.log('✅ HERD DEBUG: Found calf 8140A:', targetCalf);
+  } else {
+    console.log('❌ HERD DEBUG: Calf 8140A NOT FOUND in cows array');
+    console.log('❌ HERD DEBUG: Available tag numbers:', cows.map(cow => cow.tagNumber));
+  }
+  
   const [searchTerm, setSearchTerm] = React.useState('');
   const [activeFilter, setActiveFilter] = React.useState('all');
   const [selectedCows, setSelectedCows] = React.useState(new Set());
@@ -176,14 +195,37 @@ const HerdManagement = ({ cows, sortBy = 'name', onAddCow, onEditCow, onDeleteCo
 
   // Filter cows based on search and active filter (exclude archived cows)
   const filteredCows = React.useMemo(() => {
+    console.log('🔍 FILTER DEBUG: Starting with', cows.length, 'cows from props');
+    
     let filtered = cows.filter(cow => {
-      // Exclude archived cows from main herd view
-      if (cow.archived === true) return false;
-      
-      const matchesSearch = cow.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           cow.tagNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           cow.breed.toLowerCase().includes(searchTerm.toLowerCase());
-      
+      // Debug the specific calf
+      if (cow.tagNumber === '8140A' || cow.category === 'Calf') {
+        console.log('🐄 CALF FILTER CHECK:', {
+          name: cow.name,
+          tagNumber: cow.tagNumber,
+          category: cow.category,
+          archived: cow.archived,
+          status: cow.status
+        });
+      }
+
+      // Check archived status
+      const isArchived = cow.archived === true;
+      if (isArchived) {
+        if (cow.category === 'Calf') console.log('❌ CALF filtered out: archived');
+        return false;
+      }
+
+      // Check search match
+      const matchesSearch = (cow.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (cow.tagNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           (cow.breed || '').toLowerCase().includes(searchTerm.toLowerCase());
+      if (!matchesSearch) {
+        if (cow.category === 'Calf') console.log('❌ CALF filtered out: search mismatch');
+        return false;
+      }
+
+      // Check category filter
       let matchesFilter = true;
       switch (activeFilter) {
         case 'cows':
@@ -194,6 +236,7 @@ const HerdManagement = ({ cows, sortBy = 'name', onAddCow, onEditCow, onDeleteCo
           break;
         case 'calves':
           matchesFilter = cow.category === 'Calf';
+          console.log('🔍 CALF FILTER: Checking calf filter for', cow.name || cow.tagNumber, 'category:', cow.category, 'matches:', matchesFilter);
           break;
         case 'bulls':
           matchesFilter = cow.category === 'Bull';
@@ -207,14 +250,22 @@ const HerdManagement = ({ cows, sortBy = 'name', onAddCow, onEditCow, onDeleteCo
           matchesFilter = true;
           break;
       }
-      
-      return matchesSearch && matchesFilter;
+
+      if (!matchesFilter) {
+        if (cow.category === 'Calf') console.log('❌ CALF filtered out: category filter', activeFilter);
+        return false;
+      }
+
+      if (cow.category === 'Calf') console.log('✅ CALF passed all basic filters');
+      return true;
     });
 
-    // Apply advanced filters
+    // FIXED: Apply advanced filters properly
     filtered = filtered.filter(applyAdvancedFilters);
     
-    // Sort the filtered results
+    console.log('🔍 FILTER DEBUG: Final filtered results:', filtered.length, 'animals');
+    console.log('🔍 FILTER DEBUG: Calves in final results:', filtered.filter(c => c.category === 'Calf').map(c => c.tagNumber));
+    
     return sortCows(filtered);
   }, [cows, searchTerm, activeFilter, selectedBreeds, selectedStatuses, selectedLocations, healthScoreRange, healthStatusFilters, recentActivityOnly, sortBy, sortDirection]);
 

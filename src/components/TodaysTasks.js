@@ -5,12 +5,11 @@ import {
   AlertTriangle, 
   CheckCircle, 
   Plus,
-  X,
-  Bug
+  X
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import taskService from '../utils/taskService';
-import TaskDebugPanel from './TaskDebugPanel';
+
 
 const ASSIGNEES = [
   { id: 'jason', name: 'Jason Burianek' },
@@ -38,7 +37,7 @@ const TodaysTasks = ({ cows }) => {
   const [formErrors, setFormErrors] = useState({});
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [completedTaskIds, setCompletedTaskIds] = useState([]);
-  const [showDebugPanel, setShowDebugPanel] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [lastSync, setLastSync] = useState(null);
 
@@ -301,14 +300,6 @@ const TodaysTasks = ({ cows }) => {
         </div>
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => setShowDebugPanel(true)}
-            className="flex items-center space-x-2 bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors font-medium shadow"
-            title="Debug Task Sync Issues"
-          >
-            <Bug className="w-4 h-4" />
-            <span>Debug</span>
-          </button>
-          <button
             onClick={handleAddTask}
             className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium shadow"
           >
@@ -523,11 +514,7 @@ const TodaysTasks = ({ cows }) => {
         </div>
       )}
 
-      {/* Debug Panel */}
-      <TaskDebugPanel 
-        isOpen={showDebugPanel} 
-        onClose={() => setShowDebugPanel(false)} 
-      />
+
     </div>
   );
 };

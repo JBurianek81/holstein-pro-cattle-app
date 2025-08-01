@@ -16,7 +16,8 @@ import {
   Target,
   CheckCircle,
   Archive,
-  LogOut
+  LogOut,
+  X
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
@@ -40,7 +41,7 @@ import ArchivedAnimals from './components/ArchivedAnimals';
 import { calculateReproductiveStatus, calculateHerdHealthScore, getHealthScoreBadge } from './utils/cowDataModel';
 
 function AppContent() {
-  const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData, testFirebaseConnection } = useAuth();
+  const { user, farm, farmData, loading, login, logout, updateCows, updateBullInventory, updateProfileData, refreshFarmData, testFirebaseConnection } = useAuth();
   const { updateTheme } = useTheme();
   
   // ALL HOOKS FIRST - at the very top
@@ -89,6 +90,7 @@ function AppContent() {
   
   // Task management state
   const [userTasks, setUserTasks] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Bull inventory state
   const [bullInventory, setBullInventory] = useState(farmData?.bullInventory || [
@@ -293,6 +295,20 @@ function AppContent() {
       initializeFCM();
     }
   }, [user, loading]);
+
+  // Close notification dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showNotifications && !event.target.closest('.notification-dropdown')) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotifications]);
 
   // Load user tasks for notification bell
   useEffect(() => {
@@ -1361,30 +1377,60 @@ function AppContent() {
       return updatedCows;
     });
 
-    // CRITICAL FIX: Save to Firebase after profile update
-    console.log('💾 CRITICAL FIX: Saving profile changes to Firebase');
-    if (user?.farmCode) {
+    // CALF PROTECTION: If calving records increased, reload fresh data but still update local state
+    const currentCalvingRecords = currentCowInState?.calvingRecords?.length || 0;
+    const updatedCalvingRecords = cowWithStatus.calvingRecords?.length || 0;
+
+    if (updatedCalvingRecords > currentCalvingRecords) {
+      console.log('🚨 CALF PROTECTION: Calving records increased - reloading fresh farm data');
+      console.log('🚨 CALF PROTECTION: Current calving records:', currentCalvingRecords);
+      console.log('🚨 CALF PROTECTION: Updated calving records:', updatedCalvingRecords);
+      
+      // Wait for calf creation to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Force reload fresh farm data from Firebase
       try {
-        // Get the updated cows array after the state update
-        const updatedCowsForFirebase = cows.map(cow => 
-          cow.id === updatedCow.id ? cowWithStatus : cow
-        );
+        console.log('🔄 CALF PROTECTION: Reloading fresh farm data with new calf');
         
-        console.log('💾 CRITICAL FIX: Saving to Firebase with breeding records:', 
-          updatedCowsForFirebase.filter(c => c.breedingRecords?.length > 0).map(c => ({ 
-            name: c.name, 
-            records: c.breedingRecords?.length 
-          }))
-        );
-        
-        const result = await updateCows(updatedCowsForFirebase);
-        if (result && result.success) {
-          console.log('✅ CRITICAL FIX: Profile changes saved to Firebase successfully');
+        // Get fresh farm data that includes the new calf
+        if (refreshFarmData) {
+          await refreshFarmData();
+          console.log('✅ CALF PROTECTION: Fresh farm data reloaded');
         } else {
-          console.error('❌ CRITICAL FIX: Failed to save profile changes to Firebase:', result?.error);
+          // Fallback: reload the page to get fresh data
+          console.log('🔄 CALF PROTECTION: Fallback - reloading page to get fresh data');
+          window.location.reload();
         }
       } catch (error) {
-        console.error('❌ CRITICAL FIX: Error saving profile changes to Firebase:', error);
+        console.error('❌ CALF PROTECTION: Error reloading farm data:', error);
+      }
+    } else {
+      // Normal update - proceed with Firebase save
+      console.log('💾 CRITICAL FIX: Normal update - saving profile changes to Firebase');
+      if (user?.farmCode) {
+        try {
+          // Get the updated cows array after the state update
+          const updatedCowsForFirebase = cows.map(cow => 
+            cow.id === updatedCow.id ? cowWithStatus : cow
+          );
+          
+          console.log('💾 CRITICAL FIX: Saving to Firebase with breeding records:', 
+            updatedCowsForFirebase.filter(c => c.breedingRecords?.length > 0).map(c => ({ 
+              name: c.name, 
+              records: c.breedingRecords?.length 
+            }))
+          );
+          
+          const result = await updateCows(updatedCowsForFirebase);
+          if (result && result.success) {
+            console.log('✅ CRITICAL FIX: Profile changes saved to Firebase successfully');
+          } else {
+            console.error('❌ CRITICAL FIX: Failed to save profile changes to Firebase:', result?.error);
+          }
+        } catch (error) {
+          console.error('❌ CRITICAL FIX: Error saving profile changes to Firebase:', error);
+        }
       }
     }
     
@@ -1777,14 +1823,66 @@ function AppContent() {
                   
                   if (hasTasks && pendingTasks > 0) {
                     return (
-                      <div
-                        className="relative p-2 text-slate-600"
-                        title={`${pendingTasks} pending task${pendingTasks !== 1 ? 's' : ''}`}
-                      >
-                        <Bell className="w-5 h-5" />
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-                          {pendingTasks > 9 ? '9+' : pendingTasks}
-                        </span>
+                      <div className="relative notification-dropdown">
+                        <button 
+                          onClick={() => setShowNotifications(!showNotifications)}
+                          className="relative p-2 text-slate-600 hover:text-slate-900 transition-colors"
+                          title={`${pendingTasks} pending task${pendingTasks !== 1 ? 's' : ''}`}
+                        >
+                          <Bell className="w-5 h-5" />
+                          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                            {pendingTasks > 9 ? '9+' : pendingTasks}
+                          </span>
+                        </button>
+                        
+                        {/* Notification Dropdown */}
+                        {showNotifications && (
+                          <div className="notification-dropdown absolute top-12 right-0 bg-white shadow-lg rounded-lg border border-slate-200 p-4 w-80 z-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <h3 className="text-sm font-semibold text-slate-900">Pending Tasks</h3>
+                              <button 
+                                onClick={() => setShowNotifications(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            
+                            <div className="space-y-2 max-h-64 overflow-y-auto">
+                              {userTasks.filter(task => !task.completed).map((task) => (
+                                <div key={task.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <h4 className="text-sm font-medium text-slate-900 mb-1">{task.title}</h4>
+                                      <div className="flex items-center space-x-2 text-xs text-slate-600">
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                          task.priority === 'high' ? 'bg-red-100 text-red-700' :
+                                          task.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                          'bg-green-100 text-green-700'
+                                        }`}>
+                                          {task.priority}
+                                        </span>
+                                        <span>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            
+                            <div className="mt-3 pt-3 border-t border-slate-200">
+                              <button 
+                                onClick={() => {
+                                  setShowNotifications(false);
+                                  setCurrentView('dashboard');
+                                }}
+                                className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                View All Tasks
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   }

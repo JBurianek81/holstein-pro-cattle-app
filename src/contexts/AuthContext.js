@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { 
   getFarmData,
@@ -8,6 +8,7 @@ import {
   logout as logoutUser
 } from '../utils/authUtils';
 import { firebaseAuth } from '../utils/firestoreService';
+import { useCattleRealtime } from '../hooks/useCattleRealtime';
 
 const AuthContext = createContext();
 
@@ -21,23 +22,43 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [farm, setFarm] = useState(null);
-  const [farmData, setFarmDataState] = useState({
-    cows: [],
-    bullInventory: [],
-    profileData: {
-      farmName: '',
-      ownerName: '',
-      farmAddress: '',
-      phone: '',
-      email: '',
-      operationType: 'Dairy',
-      herdSize: '100-500',
-      yearsInOperation: '1',
-      farmLogo: null
-    }
-  });
   const [loading, setLoading] = useState(true);
+  const [farm, setFarm] = useState(null);
+  const [farmData, setFarmData] = useState(null);
+  const [farmUnsubscribe, setFarmUnsubscribe] = useState(null);
+  
+  // Use real-time cattle data as the primary source
+  const { cows: realtimeCows, loading: cattleLoading } = useCattleRealtime(
+    user?.farmCode, 
+    user
+  );
+
+  // Update the cows state to use real-time data
+  const [cows, setCows] = useState([]);
+  
+  // Sync real-time cattle data to local state
+  useEffect(() => {
+    if (realtimeCows && realtimeCows.length > 0) {
+      console.log('🔄 AUTH SYNC: Updating cows from real-time data:', realtimeCows.length);
+      setCows(realtimeCows);
+    } else if (realtimeCows && realtimeCows.length === 0) {
+      console.log('🔄 AUTH SYNC: No cattle found in real-time data');
+      setCows([]);
+    }
+  }, [realtimeCows]);
+
+  const [bullInventory, setBullInventory] = useState([]);
+  const [profileData, setProfileData] = useState({
+    farmName: '',
+    ownerName: '',
+    farmAddress: '',
+    phone: '',
+    email: '',
+    operationType: 'Dairy',
+    herdSize: '100-500',
+    yearsInOperation: '1',
+    farmLogo: null
+  });
 
   // Load authentication state on app start using Firebase Auth
   useEffect(() => {
@@ -61,16 +82,44 @@ export const AuthProvider = ({ children }) => {
             console.log('🔐 STEP 4: User authenticated:', fullUser);
             console.log('🔐 STEP 5: Loading farm data for farmCode:', userData.farmCode);
             
+            // Set up real-time listener for farmData document
+            console.log('🔥 REAL-TIME: Setting up farmData document listener for:', userData.farmCode);
+            const farmDataDocRef = doc(db, 'farmData', userData.farmCode);
+            
+            // Clean up previous listener if exists
+            if (farmUnsubscribe) {
+              console.log('🔥 REAL-TIME: Cleaning up previous farm listener');
+              farmUnsubscribe();
+            }
+            
+            const unsubscribeFarm = onSnapshot(farmDataDocRef, (doc) => {
+              if (doc.exists()) {
+                const farmData = doc.data();
+                console.log('🔥 REAL-TIME: FarmData document updated:', farmData);
+                console.log('🔥 REAL-TIME: Cows count in farmData document:', farmData.cows?.length || 0);
+                setFarmData(farmData);
+              } else {
+                console.log('🔥 REAL-TIME: FarmData document does not exist');
+                setFarmData(null);
+              }
+            }, (error) => {
+              console.error('❌ REAL-TIME: Error listening to farmData document:', error);
+            });
+            
+            // Store unsubscribe function
+            setFarmUnsubscribe(() => unsubscribeFarm);
+            
+            // Initial load
             const dataResult = await getFarmData(userData.farmCode);
             console.log('🔐 STEP 6: Farm data result:', dataResult);
             
             if (dataResult.success) {
               console.log('🔐 STEP 7: Setting farm data state:', dataResult.data);
               console.log('🔐 STEP 8: Farm profile data:', dataResult.data?.profileData);
-              setFarmDataState(dataResult.data);
+              setFarmData(dataResult.data);
               
               // FORCE STATE UPDATE:
-              setFarmDataState(prevState => {
+              setFarmData(prevState => {
                 console.log('🔥 FORCING: Previous farmData state:', prevState);
                 console.log('🔥 FORCING: New farmData state:', dataResult.data);
                 return { ...dataResult.data };
@@ -95,21 +144,7 @@ export const AuthProvider = ({ children }) => {
           // User is signed out
           setUser(null);
           setFarm(null);
-          setFarmDataState({
-            cows: [],
-            bullInventory: [],
-            profileData: {
-              farmName: '',
-              ownerName: '',
-              farmAddress: '',
-              phone: '',
-              email: '',
-              operationType: 'Dairy',
-              herdSize: '100-500',
-              yearsInOperation: '1',
-              farmLogo: null
-            }
-          });
+          setFarmData(null);
         }
       } catch (error) {
         console.error('Error loading auth state:', error);
@@ -141,10 +176,10 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (farm?.farmCode) {
       console.log('🔄 FARM SYNC: Loading farm data for code:', farm.farmCode);
-      console.log('🔄 FARM SYNC: Current cow count:', farmData?.cows?.length || 0);
+      console.log('🔄 FARM SYNC: Current cow count:', cows?.length || 0);
       console.log('🔄 FARM SYNC: Timestamp:', new Date().toISOString());
     }
-  }, [farm, farmData]);
+  }, [farm, cows]);
 
   const login = async (authData) => {
     setUser(authData.user);
@@ -154,86 +189,53 @@ export const AuthProvider = ({ children }) => {
     if (authData.user?.farmCode) {
       const dataResult = await getFarmData(authData.user.farmCode);
       if (dataResult.success) {
-        setFarmDataState(dataResult.data);
+        setFarmData(dataResult.data);
       }
     }
   };
 
   const logout = async () => {
+    // Clean up farm listener
+    if (farmUnsubscribe) {
+      console.log('🔥 REAL-TIME: Cleaning up farm listener on logout');
+      farmUnsubscribe();
+      setFarmUnsubscribe(null);
+    }
+    
     setUser(null);
     setFarm(null);
-    setFarmDataState({
-      cows: [],
-      bullInventory: [],
-      profileData: {
-        farmName: '',
-        ownerName: '',
-        farmAddress: '',
-        phone: '',
-        email: '',
-        operationType: 'Dairy',
-        herdSize: '100-500',
-        yearsInOperation: '1',
-        farmLogo: null
-      }
-    });
+    setFarmData(null);
     await logoutUser();
   };
 
   const updateFarmData = (newData) => {
-    setFarmDataState(prevData => ({
+    setFarmData(prevData => ({
       ...prevData,
       ...newData
     }));
   };
 
-  const updateCows = async (newCows) => {
-    console.log('🚨 EMERGENCY STOP: updateCows called - checking for infinite loop');
-    console.log('💾 FIREBASE SAVE: updateCows called with', newCows.length, 'cows');
-    console.log('🔥 EMERGENCY: Connection status:', navigator.onLine);
-    console.log('🔥 EMERGENCY: User authenticated:', !!user);
-    console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
-    
-    // Update local state
-    setFarmDataState(prevData => {
-      const updatedData = {
-        ...prevData,
-        cows: newCows
-      };
+  const updateCows = async (updatedCows) => {
+    try {
+      console.log('💾 AUTH: Updating cows in farms document (legacy sync)');
       
-      // Save to Firebase with error handling
       if (user?.farmCode) {
-        console.log('💾 FIREBASE SAVE: Attempting to save complete farm data to Firebase');
+        const farmDocRef = doc(db, 'farms', user.farmCode);
+        await updateDoc(farmDocRef, {
+          cows: updatedCows,
+          updatedAt: serverTimestamp()
+        });
         
-        // Use async IIFE to handle the async operation
-        (async () => {
-          try {
-            console.log('🔥 EMERGENCY: Starting Firestore save operation');
-            const result = await setFarmData(user.farmCode, updatedData);
-            console.log('🔥 EMERGENCY: Firestore save result:', result);
-            
-            if (result && result.success) {
-              console.log('✅ FIREBASE SAVE: Data saved successfully to Firestore');
-            } else {
-              console.error('❌ FIRESTORE ERROR: Save operation failed:', result?.error);
-              // Don't reload data if save failed - keep local changes
-              console.log('🚫 Skipping data reload due to save failure');
-            }
-          } catch (error) {
-            console.error('❌ FIRESTORE ERROR: Exception during save:', error);
-            console.error('❌ FIRESTORE ERROR: Error details:', {
-              code: error.code,
-              message: error.message,
-              stack: error.stack
-            });
-            // Don't reload data if save failed - keep local changes
-            console.log('🚫 Skipping data reload due to save exception');
-          }
-        })();
+        console.log('✅ AUTH: Farm document updated with', updatedCows.length, 'cows');
+        return { success: true };
+      } else {
+        console.error('❌ AUTH: No farmCode available for cow update');
+        return { success: false, error: 'No farmCode available' };
       }
-      
-      return updatedData;
-    });
+    } catch (error) {
+      console.error('❌ AUTH: Error updating cows:', error);
+      return { success: false, error: error.message };
+    }
   };
 
   const updateBullInventory = async (newBullInventory) => {
@@ -244,7 +246,7 @@ export const AuthProvider = ({ children }) => {
     console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
     
     // Update local state
-    setFarmDataState(prevData => {
+    setFarmData(prevData => {
       const updatedData = {
         ...prevData,
         bullInventory: newBullInventory
@@ -312,7 +314,7 @@ export const AuthProvider = ({ children }) => {
     console.log('🔥 EMERGENCY: Farm code:', user?.farmCode);
     
     // Update local state
-    setFarmDataState(prevData => {
+    setFarmData(prevData => {
       const updatedData = {
         ...prevData,
         profileData: {
@@ -356,6 +358,17 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
+  const refreshFarmData = async () => {
+    if (user?.farmCode) {
+      console.log('🔄 REFRESH: Loading fresh farm data for code:', user.farmCode);
+      const result = await getFarmData(user.farmCode);
+      if (result.success) {
+        setFarmData(result.data);
+        console.log('✅ REFRESH: Fresh farm data loaded with', result.data.cows?.length, 'cows');
+      }
+    }
+  };
+
   const value = {
     user,
     farm,
@@ -367,6 +380,7 @@ export const AuthProvider = ({ children }) => {
     updateCows,
     updateBullInventory,
     updateProfileData,
+    refreshFarmData,
     testFirebaseConnection,
     isAuthenticated: !!user
   };
